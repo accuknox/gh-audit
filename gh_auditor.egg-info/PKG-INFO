@@ -1,0 +1,11 @@
+Metadata-Version: 2.4
+Name: gh-auditor
+Version: 0.1.0
+Summary: Audit GitHub Actions workflows across an organization for security best practices
+Requires-Python: >=3.10
+Requires-Dist: requests>=2.31.0
+Requires-Dist: pyyaml>=6.0
+Requires-Dist: rich>=13.0
+Provides-Extra: dev
+Requires-Dist: pytest>=7.0; extra == "dev"
+Requires-Dist: responses>=0.23; extra == "dev"

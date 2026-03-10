@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gh-auditor"
+version = "0.1.0"
+description = "Audit GitHub Actions workflows across an organization for security best practices"
+requires-python = ">=3.10"
+dependencies = [
+    "requests>=2.31.0",
+    "pyyaml>=6.0",
+    "rich>=13.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "responses>=0.23",
+]
+
+[project.scripts]
+gh-auditor = "gh_auditor.cli:main"

@@ -1,0 +1,54 @@
+# gh-auditor configuration
+#
+# Copy this file to audit-config.yaml and fill in your values.
+# Token is read from the GH_AUDIT_TOKEN environment variable (not stored here).
+
+# GitHub organization to audit (required)
+org: accuknox
+
+# Output file path for the JSON report (default: stdout when set to "-")
+output: report.json
+
+# HTML report output path (optional, omit to skip HTML generation)
+# html_output: report.html
+
+# SARIF v2.1.0 report output path (optional, omit to skip SARIF generation)
+# sarif_output: report.sarif
+
+# Log file path (optional, captures all repos scanned/skipped with details)
+# log_file: audit.log
+
+# Include archived repositories (default: false)
+include_archived: false
+
+# Include forked repositories (default: false)
+include_forks: false
+
+# Only scan repos updated (pushed to) within the last N months (optional, omit to scan all)
+# updated_within_months: 3
+
+# Skip identity/access audit (org members, teams, collaborators) (default: false)
+skip_identity: false
+
+# Verbosity level: 0 = warnings only, 1 = info, 2 = debug (default: 0)
+verbosity: 0
+
+# Specific repos to audit (optional, overrides org-wide scan).
+# If omitted, all repos in the org are scanned on their default branch.
+# Each entry can specify an optional branch; if omitted, the default branch is used.
+#
+# Supports regex patterns with `regex: true`:
+#   - repo: frontend-.*       # matches all repos starting with "frontend-"
+#     regex: true
+#   - repo: .*-service        # matches all repos ending with "-service"
+#     regex: true
+#     branch: release-.*      # also regex-match branch names
+#
+# repos:
+#   - repo: my-org/frontend
+#     branch: main
+#   - repo: my-org/backend
+#     branch: develop
+#   - repo: my-org/infra
+#   - repo: ".*-microservice"
+#     regex: true
