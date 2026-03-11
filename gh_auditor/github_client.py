@@ -197,6 +197,51 @@ class GitHubClient:
         return resp.json()
 
     # -----------------------------------------------------------------
+    # Branch protection
+    # -----------------------------------------------------------------
+
+    def get_branch_protection(self, owner: str, repo: str, branch: str) -> dict | None:
+        """Fetch branch protection rules for a given branch.
+
+        Returns the protection dict or None if no protection is configured
+        or if the API returns 404/403.
+        """
+        resp = self._session.get(
+            f"{GITHUB_API}/repos/{owner}/{repo}/branches/{branch}/protection",
+            timeout=30,
+        )
+        if resp.status_code in (403, 404):
+            logger.debug(
+                "No branch protection for %s/%s:%s (HTTP %d)",
+                owner, repo, branch, resp.status_code,
+            )
+            return None
+        resp.raise_for_status()
+        return resp.json()
+
+    # -----------------------------------------------------------------
+    # Org actions permissions
+    # -----------------------------------------------------------------
+
+    def get_org_actions_permissions(self, org: str) -> dict | None:
+        """Fetch org-level Actions permissions and workflow settings.
+
+        Returns None on 403/404 (insufficient permissions).
+        """
+        resp = self._session.get(
+            f"{GITHUB_API}/orgs/{org}/actions/permissions",
+            timeout=30,
+        )
+        if resp.status_code in (403, 404):
+            logger.debug(
+                "Could not fetch actions permissions for %s: %d",
+                org, resp.status_code,
+            )
+            return None
+        resp.raise_for_status()
+        return resp.json()
+
+    # -----------------------------------------------------------------
     # Helpers
     # -----------------------------------------------------------------
 

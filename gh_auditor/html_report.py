@@ -28,8 +28,8 @@ def generate_html_report(report: dict) -> str:
     # Sort repos: most findings first, then alphabetically
     sorted_repos = sorted(repos, key=lambda r: (-len(r["findings"]), r["repo"]))
 
-    # Build per-rule summary
-    rule_summary = _build_rule_summary(repos)
+    # Build per-rule summary (includes repo, identity, and org_settings findings)
+    rule_summary = _build_rule_summary(report)
 
     # Build nav items dynamically based on what sections exist
     nav_items = _build_nav_items(report)
@@ -126,6 +126,8 @@ def generate_html_report(report: dict) -> str:
 
 {_render_identity_section(report.get("identity"))}
 
+{_render_org_settings_section(report.get("org_settings"))}
+
 <!-- Per-Repo Details -->
 <section class="card collapsible" id="sec-repos">
   <h2 class="section-toggle" onclick="toggleSection(this)">
@@ -206,6 +208,9 @@ def _build_nav_items(report: dict) -> str:
             items.append(("sec-teams", "Teams"))
         if identity.get("repo_access"):
             items.append(("sec-access", "Repo Access"))
+    org_settings = report.get("org_settings")
+    if org_settings and "error" not in org_settings:
+        items.append(("sec-org-settings", "Org Settings"))
     items.append(("sec-repos", "Repositories"))
     return "".join(
         f'<a class="nav-link" href="#{sid}">{label}</a>'
@@ -248,9 +253,11 @@ def _severity_badge(sev: str) -> str:
     return f'<span class="badge" style="background:{colors["badge"]};color:{colors["text"]}">{_esc(sev.upper())}</span>'
 
 
-def _build_rule_summary(repos: list[dict]) -> list[dict]:
+def _build_rule_summary(report: dict) -> list[dict]:
     rules: dict[str, dict] = {}
-    for repo in repos:
+
+    # Repo-level findings (workflow + branch protection + repo security)
+    for repo in report.get("repos", []):
         for f in repo["findings"]:
             rid = f["rule_id"]
             if rid not in rules:
@@ -263,6 +270,36 @@ def _build_rule_summary(repos: list[dict]) -> list[dict]:
                 }
             rules[rid]["count"] += 1
             rules[rid]["repos"].add(repo["repo"])
+
+    # Identity findings
+    for f in report.get("identity", {}).get("findings", []):
+        rid = f["rule_id"]
+        if rid not in rules:
+            rules[rid] = {
+                "rule_id": rid,
+                "title": f.get("title", ""),
+                "severity": f.get("severity", "info"),
+                "count": 0,
+                "repos": set(),
+            }
+        rules[rid]["count"] += 1
+        if f.get("repo"):
+            rules[rid]["repos"].add(f["repo"])
+
+    # Org settings findings
+    org = report.get("audit_metadata", {}).get("organization", "org")
+    for f in report.get("org_settings", {}).get("findings", []):
+        rid = f["rule_id"]
+        if rid not in rules:
+            rules[rid] = {
+                "rule_id": rid,
+                "title": f.get("title", ""),
+                "severity": f.get("severity", "info"),
+                "count": 0,
+                "repos": set(),
+            }
+        rules[rid]["count"] += 1
+        rules[rid]["repos"].add(org)
 
     result = sorted(
         rules.values(),
@@ -381,6 +418,102 @@ def _render_findings_table(findings: list[dict]) -> str:
 # ---------------------------------------------------------------------------
 # Identity section rendering
 # ---------------------------------------------------------------------------
+
+def _render_org_settings_section(org_settings: dict | None) -> str:
+    """Render the organization settings audit section."""
+    if not org_settings or "error" in org_settings:
+        return ""
+
+    findings = org_settings.get("findings", [])
+    settings = org_settings.get("settings", {})
+
+    parts = []
+
+    # --- Settings summary cards ---
+    two_fa = settings.get("two_factor_requirement_enabled")
+    default_perm = settings.get("default_repository_permission", "unknown")
+    actions_perms = settings.get("actions_permissions", {})
+    allowed_actions = actions_perms.get("allowed_actions", "unknown")
+    default_wf_perm = actions_perms.get("default_workflow_permissions", "unknown")
+
+    two_fa_color = "#16a34a" if two_fa else "#dc2626"
+    two_fa_text = "Enabled" if two_fa else "Not Required"
+    perm_color = "#16a34a" if default_perm in ("read", "none") else "#dc2626"
+    actions_color = "#16a34a" if allowed_actions != "all" else "#dc2626"
+    wf_perm_color = "#16a34a" if default_wf_perm != "write" else "#dc2626"
+
+    parts.append(f"""
+<section class="summary-grid">
+  <div class="card stat-card">
+    <div class="stat-number" style="color:{two_fa_color};font-size:1.1rem">{_esc(two_fa_text)}</div>
+    <div class="stat-label">2FA Requirement</div>
+  </div>
+  <div class="card stat-card">
+    <div class="stat-number" style="color:{perm_color};font-size:1.1rem">{_esc(default_perm)}</div>
+    <div class="stat-label">Default Repo Permission</div>
+  </div>
+  <div class="card stat-card">
+    <div class="stat-number" style="color:{actions_color};font-size:1.1rem">{_esc(allowed_actions)}</div>
+    <div class="stat-label">Allowed Actions</div>
+  </div>
+  <div class="card stat-card">
+    <div class="stat-number" style="color:{wf_perm_color};font-size:1.1rem">{_esc(default_wf_perm)}</div>
+    <div class="stat-label">Default Token Permission</div>
+  </div>
+</section>""")
+
+    # --- Findings table ---
+    if findings:
+        sev_counts = {}
+        for f in findings:
+            s = f.get("severity", "info")
+            sev_counts[s] = sev_counts.get(s, 0) + 1
+
+        rows = []
+        for f in findings:
+            rows.append(
+                f'<tr class="finding-row" data-severity="{_esc(f.get("severity", "info"))}">'
+                f'<td><code>{_esc(f.get("rule_id", ""))}</code></td>'
+                f'<td>{_severity_badge(f.get("severity", "info"))}</td>'
+                f'<td>'
+                f'<div class="finding-title">{_esc(f.get("title", ""))}</div>'
+                f'<div class="finding-desc">{_esc(f.get("description", ""))}</div>'
+                f'</td></tr>'
+            )
+
+        sev_filter_btns = '<button class="filter-btn active" onclick="filterOrgSeverity(\'all\', this)">All</button>'
+        for s in SEVERITY_ORDER:
+            if sev_counts.get(s, 0) > 0:
+                sev_filter_btns += f'<button class="filter-btn" onclick="filterOrgSeverity(\'{s}\', this)">{s.upper()} ({sev_counts[s]})</button>'
+
+        parts.append(f"""
+<section class="card collapsible" id="sec-org-settings">
+  <h2 class="section-toggle" onclick="toggleSection(this)">
+    <span class="toggle-icon open">&#9660;</span> Organization Settings Findings ({len(findings)})
+  </h2>
+  <div class="section-body">
+    <div class="filter-buttons" id="org-severity-filters">
+      {sev_filter_btns}
+    </div>
+    <table class="data-table" id="org-settings-table">
+      <thead><tr><th style="width:80px">Rule</th><th style="width:90px">Severity</th><th>Details</th></tr></thead>
+      <tbody>{"".join(rows)}</tbody>
+    </table>
+  </div>
+</section>""")
+    else:
+        parts.append("""
+<section class="card collapsible" id="sec-org-settings">
+  <h2 class="section-toggle" onclick="toggleSection(this)">
+    <span class="toggle-icon open">&#9660;</span> Organization Settings Findings
+  </h2>
+  <div class="section-body">
+    <p class="empty">No organization settings findings.</p>
+  </div>
+</section>""")
+
+    return "\n".join(parts)
+
 
 def _render_identity_section(identity: dict | None) -> str:
     if not identity or "error" in identity:
@@ -1112,6 +1245,21 @@ function filterIAMSeverity(sev, btn) {
   btn.closest('.filter-buttons').querySelectorAll('.filter-btn').forEach(function(b) { b.classList.remove('active'); });
   btn.classList.add('active');
   var table = document.getElementById('iam-findings-table');
+  if (!table) return;
+  table.querySelectorAll('tbody tr.finding-row').forEach(function(row) {
+    if (sev === 'all') {
+      row.style.display = '';
+    } else {
+      row.style.display = row.getAttribute('data-severity') === sev ? '' : 'none';
+    }
+  });
+}
+
+/* ---- Org settings severity filter ---- */
+function filterOrgSeverity(sev, btn) {
+  btn.closest('.filter-buttons').querySelectorAll('.filter-btn').forEach(function(b) { b.classList.remove('active'); });
+  btn.classList.add('active');
+  var table = document.getElementById('org-settings-table');
   if (!table) return;
   table.querySelectorAll('tbody tr.finding-row').forEach(function(row) {
     if (sev === 'all') {

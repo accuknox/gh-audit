@@ -70,6 +70,8 @@ def load_config(config_path: str) -> AuditConfig:
         include_archived=bool(raw.get("include_archived", False)),
         include_forks=bool(raw.get("include_forks", False)),
         skip_identity=bool(raw.get("skip_identity", False)),
+        skip_repo_security=bool(raw.get("skip_repo_security", False)),
+        skip_org_settings=bool(raw.get("skip_org_settings", False)),
         updated_within_months=updated_within,
     ), raw.get("output", "-"), raw.get("verbosity", 0), raw.get("html_output", None), raw.get("sarif_output", None), raw.get("log_file", None)
 

@@ -41,6 +41,8 @@ class AuditConfig:
     include_archived: bool = False
     include_forks: bool = False
     skip_identity: bool = False
+    skip_repo_security: bool = False
+    skip_org_settings: bool = False
     updated_within_months: int | None = None  # Only scan repos updated within N months
 
 
@@ -125,6 +127,23 @@ def run_audit(
             report["audit_metadata"]["findings_by_severity"][sev] = (
                 report["audit_metadata"]["findings_by_severity"].get(sev, 0) + 1
             )
+
+    # Org settings audit
+    if not config.skip_org_settings:
+        try:
+            from .org_settings import audit_org_settings
+            org_settings_report = audit_org_settings(client, config.org)
+            report["org_settings"] = org_settings_report
+
+            for finding in org_settings_report.get("findings", []):
+                sev = finding.get("severity", "info")
+                report["audit_metadata"]["total_findings"] += 1
+                report["audit_metadata"]["findings_by_severity"][sev] = (
+                    report["audit_metadata"]["findings_by_severity"].get(sev, 0) + 1
+                )
+        except Exception as e:
+            logger.warning("Org settings audit failed: %s", e)
+            report["org_settings"] = {"error": str(e), "findings": []}
 
     # Identity / access audit
     if not config.skip_identity:
@@ -408,6 +427,362 @@ def _audit_repo(
         logger.info("  Workflow %s/%s: %d finding(s)", full_name, wf_name, wf_findings)
         progress.on_workflow_scanned(full_name, wf_name, wf_findings, wf_severity_counts)
 
+    # Branch protection audit on the scanned branch
+    _audit_branch_protection(client, owner, repo, branch, repo_report)
+
+    # Repository security features audit
+    _audit_repo_security(client, owner, repo, branch, repo_meta, repo_report)
+
     logger.info("Done: %s — %d workflow(s), %d finding(s)", full_name, repo_report["workflows_scanned"], len(repo_report["findings"]))
     progress.on_repo_done(full_name, len(repo_report["findings"]))
     return repo_report
+
+
+def _audit_branch_protection(
+    client: GitHubClient,
+    owner: str,
+    repo: str,
+    branch: str,
+    repo_report: dict,
+) -> None:
+    """Check branch protection rules and append findings to repo_report."""
+    full_name = f"{owner}/{repo}"
+    logger.info("  Checking branch protection for %s @ %s", full_name, branch)
+
+    try:
+        protection = client.get_branch_protection(owner, repo, branch)
+    except Exception as e:
+        logger.warning("Failed to fetch branch protection for %s: %s", full_name, e)
+        return
+
+    if protection is None:
+        # No branch protection at all — both rules fail
+        repo_report["findings"].append({
+            "rule_id": "BPR001",
+            "severity": "high",
+            "title": f"No branch protection rules on '{branch}'",
+            "description": (
+                f"Branch '{branch}' in {full_name} has no branch protection rules configured. "
+                f"This means PRs can be merged without any approvals and direct pushes to "
+                f"the branch are allowed. Enable branch protection with required reviews "
+                f"and restrict direct pushes."
+            ),
+            "workflow_file": "",
+        })
+        return
+
+    # Rule 1: PRs must require at least 1 approver
+    pr_reviews = protection.get("required_pull_request_reviews")
+    if not pr_reviews:
+        repo_report["findings"].append({
+            "rule_id": "BPR001",
+            "severity": "high",
+            "title": f"No required PR reviews on '{branch}'",
+            "description": (
+                f"Branch '{branch}' in {full_name} does not require pull request reviews "
+                f"before merging. Anyone with write access can merge PRs without approval. "
+                f"Enable 'Require pull request reviews before merging' with at least 1 "
+                f"required approving review."
+            ),
+            "workflow_file": "",
+        })
+    else:
+        required_count = pr_reviews.get("required_approving_review_count", 0)
+        if required_count < 1:
+            repo_report["findings"].append({
+                "rule_id": "BPR001",
+                "severity": "high",
+                "title": f"Required approving reviews is 0 on '{branch}'",
+                "description": (
+                    f"Branch '{branch}' in {full_name} has pull request reviews enabled "
+                    f"but required_approving_review_count is {required_count}. Set this "
+                    f"to at least 1 to ensure PRs are reviewed before merging."
+                ),
+                "workflow_file": "",
+            })
+
+    # Rule 2: Direct pushes should be restricted (enforce_admins + restrict pushes)
+    # Check 'restrictions' (limits who can push) and 'enforce_admins' (applies rules to admins too)
+    restrictions = protection.get("restrictions")
+    enforce_admins = protection.get("enforce_admins", {})
+    enforce_admins_enabled = enforce_admins.get("enabled", False) if isinstance(enforce_admins, dict) else bool(enforce_admins)
+    allow_force_pushes = protection.get("allow_force_pushes", {})
+    force_pushes_enabled = allow_force_pushes.get("enabled", False) if isinstance(allow_force_pushes, dict) else bool(allow_force_pushes)
+
+    if restrictions is None and not enforce_admins_enabled:
+        repo_report["findings"].append({
+            "rule_id": "BPR002",
+            "severity": "high",
+            "title": f"Direct pushes not restricted on '{branch}'",
+            "description": (
+                f"Branch '{branch}' in {full_name} does not restrict who can push directly. "
+                f"There are no push restrictions configured and admin enforcement is disabled, "
+                f"meaning admins can bypass all branch protection rules. Enable push restrictions "
+                f"and/or 'Include administrators' to prevent direct commits to the branch."
+            ),
+            "workflow_file": "",
+        })
+    elif not enforce_admins_enabled:
+        repo_report["findings"].append({
+            "rule_id": "BPR002",
+            "severity": "medium",
+            "title": f"Admins can bypass branch protection on '{branch}'",
+            "description": (
+                f"Branch '{branch}' in {full_name} has push restrictions but "
+                f"'Include administrators' (enforce_admins) is disabled. Org/repo admins "
+                f"can still push directly to the branch, bypassing all protection rules. "
+                f"Enable 'Include administrators' to enforce rules for everyone."
+            ),
+            "workflow_file": "",
+        })
+
+    if force_pushes_enabled:
+        repo_report["findings"].append({
+            "rule_id": "BPR002",
+            "severity": "critical",
+            "title": f"Force pushes allowed on '{branch}'",
+            "description": (
+                f"Branch '{branch}' in {full_name} allows force pushes. This means "
+                f"anyone with push access can rewrite branch history, potentially "
+                f"removing security fixes or injecting malicious code. Disable force "
+                f"pushes on protected branches."
+            ),
+            "workflow_file": "",
+        })
+
+    # Rule 3: Required status checks must be configured
+    status_checks = protection.get("required_status_checks")
+    if not status_checks:
+        repo_report["findings"].append({
+            "rule_id": "BPR003",
+            "severity": "high",
+            "title": f"Required status checks not configured on '{branch}'",
+            "description": (
+                f"Branch '{branch}' in {full_name} has no required status checks. "
+                f"Merging is allowed without any CI/status checks passing. "
+                f"Configure required status checks to ensure PRs pass CI before merging."
+            ),
+            "workflow_file": "",
+        })
+    else:
+        contexts = status_checks.get("contexts", [])
+        checks = status_checks.get("checks", [])
+        if not contexts and not checks:
+            repo_report["findings"].append({
+                "rule_id": "BPR003",
+                "severity": "high",
+                "title": f"Required status checks empty on '{branch}'",
+                "description": (
+                    f"Branch '{branch}' in {full_name} has required status checks enabled "
+                    f"but no specific checks are configured. Merging is allowed without any "
+                    f"CI/status checks passing. Add at least one required status check."
+                ),
+                "workflow_file": "",
+            })
+
+    # Rule 4: Stale reviews should be dismissed on new pushes
+    if pr_reviews and not pr_reviews.get("dismiss_stale_reviews", False):
+        repo_report["findings"].append({
+            "rule_id": "BPR004",
+            "severity": "medium",
+            "title": f"Stale reviews not dismissed on '{branch}'",
+            "description": (
+                f"Branch '{branch}' in {full_name} does not dismiss stale pull request "
+                f"reviews when new commits are pushed. An approved PR can have new, "
+                f"unreviewed code added after approval. Enable 'Dismiss stale pull "
+                f"request approvals when new commits are pushed'."
+            ),
+            "workflow_file": "",
+        })
+
+    # Rule 5: Branch deletion should not be allowed
+    allow_deletions = protection.get("allow_deletions", {})
+    deletions_enabled = allow_deletions.get("enabled", False) if isinstance(allow_deletions, dict) else bool(allow_deletions)
+    if deletions_enabled:
+        repo_report["findings"].append({
+            "rule_id": "BPR005",
+            "severity": "critical",
+            "title": f"Branch deletion allowed on '{branch}'",
+            "description": (
+                f"Protected branch '{branch}' in {full_name} can be deleted, risking "
+                f"loss of history. Disable 'Allow deletions' on this protected branch."
+            ),
+            "workflow_file": "",
+        })
+
+    # Rule 6: Signed commits should be required
+    if not protection.get("required_signatures", {}).get("enabled", False):
+        repo_report["findings"].append({
+            "rule_id": "BPR006",
+            "severity": "medium",
+            "title": f"Signed commits not required on '{branch}'",
+            "description": (
+                f"Branch '{branch}' in {full_name} does not require signed commits. "
+                f"Enable 'Require signed commits' to verify commit authenticity."
+            ),
+            "workflow_file": "",
+        })
+
+    # Rule 7: Code owner reviews should be required (only if PR reviews exist)
+    if pr_reviews and not pr_reviews.get("require_code_owner_reviews", False):
+        repo_report["findings"].append({
+            "rule_id": "BPR007",
+            "severity": "medium",
+            "title": f"Code owner reviews not required on '{branch}'",
+            "description": (
+                f"Branch '{branch}' in {full_name} has PR reviews enabled but does not "
+                f"require review from code owners. Enable 'Require review from Code Owners' "
+                f"to ensure designated owners approve changes to their areas."
+            ),
+            "workflow_file": "",
+        })
+
+    # Rule 8: Dismissal restrictions should be set (only if PR reviews exist)
+    if pr_reviews and not pr_reviews.get("dismissal_restrictions"):
+        repo_report["findings"].append({
+            "rule_id": "BPR008",
+            "severity": "low",
+            "title": f"No dismissal restrictions on '{branch}'",
+            "description": (
+                f"Branch '{branch}' in {full_name} has PR reviews enabled but no "
+                f"dismissal restrictions. Anyone who can push can dismiss reviews. "
+                f"Configure dismissal restrictions to limit who can dismiss reviews."
+            ),
+            "workflow_file": "",
+        })
+
+    # Rule 9: Linear history should be required
+    if not protection.get("required_linear_history", {}).get("enabled", False):
+        repo_report["findings"].append({
+            "rule_id": "BPR009",
+            "severity": "low",
+            "title": f"Linear history not required on '{branch}'",
+            "description": (
+                f"Branch '{branch}' in {full_name} does not require linear history. "
+                f"Enable 'Require linear history' to prevent merge commits and keep "
+                f"a clean, auditable commit history."
+            ),
+            "workflow_file": "",
+        })
+
+    # Rule 10: Conversation resolution should be required
+    if not protection.get("required_conversation_resolution", {}).get("enabled", False):
+        repo_report["findings"].append({
+            "rule_id": "BPR010",
+            "severity": "low",
+            "title": f"Conversation resolution not required on '{branch}'",
+            "description": (
+                f"Branch '{branch}' in {full_name} does not require conversations to be "
+                f"resolved before merging. Enable 'Require conversation resolution' to "
+                f"ensure all review comments are addressed."
+            ),
+            "workflow_file": "",
+        })
+
+
+def _audit_repo_security(
+    client: GitHubClient,
+    owner: str,
+    repo: str,
+    branch: str,
+    repo_meta: dict,
+    repo_report: dict,
+) -> None:
+    """Check repository security features and append findings to repo_report."""
+    full_name = f"{owner}/{repo}"
+
+    # SEC001-SEC003: Check security_and_analysis settings
+    security_and_analysis = repo_meta.get("security_and_analysis") or {}
+
+    if security_and_analysis:
+        # SEC001: Secret scanning
+        secret_scanning = security_and_analysis.get("secret_scanning") or {}
+        if secret_scanning.get("status") != "enabled":
+            repo_report["findings"].append({
+                "rule_id": "SEC001",
+                "severity": "high",
+                "title": f"Secret scanning not enabled on {full_name}",
+                "description": (
+                    f"Repository {full_name} does not have secret scanning enabled. "
+                    f"Enable secret scanning to detect accidentally committed secrets."
+                ),
+                "workflow_file": "",
+            })
+
+        # SEC002: Push protection
+        push_protection = security_and_analysis.get("secret_scanning_push_protection") or {}
+        if push_protection.get("status") != "enabled":
+            repo_report["findings"].append({
+                "rule_id": "SEC002",
+                "severity": "high",
+                "title": f"Push protection not enabled on {full_name}",
+                "description": (
+                    f"Repository {full_name} does not have secret scanning push protection "
+                    f"enabled. Enable push protection to block pushes containing secrets."
+                ),
+                "workflow_file": "",
+            })
+
+        # SEC003: Dependabot security updates
+        dependabot = security_and_analysis.get("dependabot_security_updates") or {}
+        if dependabot.get("status") != "enabled":
+            repo_report["findings"].append({
+                "rule_id": "SEC003",
+                "severity": "medium",
+                "title": f"Dependabot security updates disabled on {full_name}",
+                "description": (
+                    f"Repository {full_name} does not have Dependabot security updates "
+                    f"enabled. Enable Dependabot to automatically receive PRs that fix "
+                    f"known vulnerabilities in dependencies."
+                ),
+                "workflow_file": "",
+            })
+
+    # SEC004: CODEOWNERS file
+    codeowners_paths = ["CODEOWNERS", ".github/CODEOWNERS", "docs/CODEOWNERS"]
+    has_codeowners = False
+    for path in codeowners_paths:
+        try:
+            content = client.get_file_content(owner, repo, path, branch)
+            if content is not None:
+                has_codeowners = True
+                break
+        except Exception:
+            continue
+
+    if not has_codeowners:
+        repo_report["findings"].append({
+            "rule_id": "SEC004",
+            "severity": "medium",
+            "title": f"No CODEOWNERS file in {full_name}",
+            "description": (
+                f"Repository {full_name} has no CODEOWNERS file. Add a CODEOWNERS file "
+                f"to define code ownership and automatically request reviews from the "
+                f"right teams."
+            ),
+            "workflow_file": "",
+        })
+
+    # SEC005: SECURITY.md file
+    security_paths = ["SECURITY.md", ".github/SECURITY.md"]
+    has_security_md = False
+    for path in security_paths:
+        try:
+            content = client.get_file_content(owner, repo, path, branch)
+            if content is not None:
+                has_security_md = True
+                break
+        except Exception:
+            continue
+
+    if not has_security_md:
+        repo_report["findings"].append({
+            "rule_id": "SEC005",
+            "severity": "low",
+            "title": f"No SECURITY.md in {full_name}",
+            "description": (
+                f"Repository {full_name} has no SECURITY.md file. Add a security policy "
+                f"to tell users how to responsibly report vulnerabilities."
+            ),
+            "workflow_file": "",
+        })

@@ -8,7 +8,6 @@ from gh_auditor.token_validator import (
     validate_token,
     _reject_classic_pat,
     _check_required_read_permissions,
-    _check_no_write_permissions,
     GITHUB_API,
 )
 
@@ -134,7 +133,12 @@ class TestCheckRequiredReadPermissions:
             _check_required_read_permissions("bad-token", "myorg")
 
     @responses.activate
-    def test_fails_missing_admin_read(self):
+    def test_warns_missing_admin_read(self):
+        """Missing Administration:Read is a warning, not a hard failure.
+
+        Some orgs restrict fine-grained PAT access to admin endpoints.
+        The audit continues with degraded functionality.
+        """
         responses.add(
             responses.GET,
             f"{GITHUB_API}/orgs/myorg/members",
@@ -159,8 +163,8 @@ class TestCheckRequiredReadPermissions:
             status=403,
             json={"message": "Resource not accessible"},
         )
-        with pytest.raises(TokenPermissionError, match="Administration.*Read-only"):
-            _check_required_read_permissions("bad-token", "myorg")
+        # Should not raise — admin read is optional
+        _check_required_read_permissions("limited-token", "myorg")
 
     @responses.activate
     def test_contents_404_is_ok(self):
@@ -191,72 +195,6 @@ class TestCheckRequiredReadPermissions:
         )
         # Should not raise — 404 is fine, it just means no .github dir
         _check_required_read_permissions("good-token", "myorg")
-
-
-class TestCheckNoWritePermissions:
-    @responses.activate
-    def test_passes_no_write(self):
-        """Token without write access should pass."""
-        responses.add(
-            responses.POST,
-            f"{GITHUB_API}/orgs/myorg/repos",
-            status=403,
-            json={"message": "Resource not accessible"},
-        )
-        responses.add(
-            responses.PATCH,
-            f"{GITHUB_API}/orgs/myorg",
-            status=403,
-            json={"message": "Resource not accessible"},
-        )
-        _check_no_write_permissions("ro-token", "myorg")
-
-    @responses.activate
-    def test_rejects_repo_write(self):
-        responses.add(
-            responses.POST,
-            f"{GITHUB_API}/orgs/myorg/repos",
-            status=422,
-            json={"message": "Validation failed"},
-        )
-        with pytest.raises(TokenPermissionError, match="WRITE access.*repositories"):
-            _check_no_write_permissions("rw-token", "myorg")
-
-    @responses.activate
-    def test_rejects_org_admin_write_200(self):
-        """PATCH /orgs returning 200 means token can update org settings."""
-        responses.add(
-            responses.POST,
-            f"{GITHUB_API}/orgs/myorg/repos",
-            status=403,
-            json={"message": "Resource not accessible"},
-        )
-        responses.add(
-            responses.PATCH,
-            f"{GITHUB_API}/orgs/myorg",
-            status=200,
-            json={"login": "myorg"},
-        )
-        with pytest.raises(TokenPermissionError, match="ADMIN/WRITE.*organization"):
-            _check_no_write_permissions("admin-token", "myorg")
-
-    @responses.activate
-    def test_rejects_org_admin_write_422(self):
-        """PATCH /orgs returning 422 means token has write but payload was bad."""
-        responses.add(
-            responses.POST,
-            f"{GITHUB_API}/orgs/myorg/repos",
-            status=403,
-            json={"message": "Resource not accessible"},
-        )
-        responses.add(
-            responses.PATCH,
-            f"{GITHUB_API}/orgs/myorg",
-            status=422,
-            json={"message": "Validation failed"},
-        )
-        with pytest.raises(TokenPermissionError, match="ADMIN/WRITE.*organization"):
-            _check_no_write_permissions("admin-token", "myorg")
 
 
 class TestValidateToken:
@@ -331,66 +269,9 @@ class TestValidateToken:
             json=[],
             status=200,
         )
-        # Write permission probes (should be denied)
-        responses.add(
-            responses.POST,
-            f"{GITHUB_API}/orgs/myorg/repos",
-            status=403,
-            json={"message": "Resource not accessible"},
-        )
-        responses.add(
-            responses.PATCH,
-            f"{GITHUB_API}/orgs/myorg",
-            status=403,
-            json={"message": "Resource not accessible"},
-        )
 
         result = validate_token("fine-grained-ro", "myorg")
         assert result["login"] == "testuser"
-
-    @responses.activate
-    def test_rejects_fine_grained_pat_with_repo_write(self):
-        responses.add(
-            responses.GET,
-            f"{GITHUB_API}/user",
-            status=200,
-            json={"login": "testuser"},
-            headers={},
-        )
-        # Read checks pass
-        responses.add(
-            responses.GET,
-            f"{GITHUB_API}/orgs/myorg/members",
-            json=[],
-            status=200,
-        )
-        responses.add(
-            responses.GET,
-            f"{GITHUB_API}/orgs/myorg/repos",
-            json=[{"full_name": "myorg/repo1"}],
-            status=200,
-        )
-        responses.add(
-            responses.GET,
-            f"{GITHUB_API}/repos/myorg/repo1/contents/.github",
-            json=[],
-            status=200,
-        )
-        responses.add(
-            responses.GET,
-            f"{GITHUB_API}/repos/myorg/repo1/collaborators",
-            json=[],
-            status=200,
-        )
-        # Write probe: token has write
-        responses.add(
-            responses.POST,
-            f"{GITHUB_API}/orgs/myorg/repos",
-            status=422,
-            json={"message": "Validation failed"},
-        )
-        with pytest.raises(TokenPermissionError, match="WRITE access"):
-            validate_token("fine-grained-rw", "myorg")
 
     @responses.activate
     def test_rejects_fine_grained_pat_missing_read_permissions(self):

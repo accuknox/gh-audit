@@ -31,9 +31,12 @@ def validate_token(token: str, org: str) -> dict:
     Checks:
     1. Token is valid and can authenticate.
     2. Classic PATs are rejected (they cannot provide read-only private repo access).
-    3. Fine-grained PATs are probed for:
-       a. Minimum required read permissions (org members, repo contents).
-       b. No write/admin permissions (repo creation, org settings update).
+    3. Fine-grained PATs are probed for minimum required read permissions.
+
+    Note: Write permission checks are intentionally omitted. Org owners get
+    implicit write access on their fine-grained PATs regardless of selected
+    permissions, making write probes unreliable. Since this tool only performs
+    read operations, extra permissions are harmless.
 
     Returns the authenticated user info dict on success.
     Raises TokenPermissionError if validation fails.
@@ -62,9 +65,6 @@ def validate_token(token: str, org: str) -> dict:
 
     # Step 3: Fine-grained PAT — verify minimum read permissions
     _check_required_read_permissions(token, org)
-
-    # Step 4: Fine-grained PAT — verify no write permissions
-    _check_no_write_permissions(token, org)
 
     return user_info
 
@@ -111,9 +111,14 @@ def _check_required_read_permissions(token: str, org: str):
 
     Probes specific API endpoints that require each permission. A 403 response
     means the permission is missing.
+
+    Permissions are split into "required" (blocks audit) and "optional"
+    (warns but continues). Administration:Read is optional because some
+    orgs restrict fine-grained PAT access to admin endpoints via org policy.
     """
     headers = _auth_headers(token)
     missing = []
+    warnings = []
 
     # Check: Organization permissions → Members → Read-only
     # Required for: list org members, teams, outside collaborators, invitations
@@ -163,6 +168,10 @@ def _check_required_read_permissions(token: str, org: str):
             logger.debug("Contents read check on %s: %d", repo_full_name, resp.status_code)
 
             # Check: Repository permissions → Administration → Read-only
+            # This is optional — some orgs block fine-grained PATs from
+            # admin endpoints via org policy. The audit will still work but
+            # branch protection, collaborator listings, and identity checks
+            # will be degraded.
             resp = requests.get(
                 f"{GITHUB_API}/repos/{owner}/{repo_name}/collaborators",
                 headers=headers,
@@ -170,11 +179,16 @@ def _check_required_read_permissions(token: str, org: str):
                 timeout=30,
             )
             if resp.status_code == 403:
-                missing.append(
+                warnings.append(
                     "Repository permissions → Administration → Read-only\n"
-                    "      (needed to list repo collaborators)"
+                    "      (needed to list repo collaborators and branch protection)\n"
+                    "      The audit will continue but some checks will be skipped."
                 )
             logger.debug("Admin read check on %s: %d", repo_full_name, resp.status_code)
+
+    if warnings:
+        for w in warnings:
+            logger.warning("Optional permission missing: %s", w.split("\n")[0].strip())
 
     if missing:
         perms_list = "\n    ".join(missing)
@@ -182,48 +196,6 @@ def _check_required_read_permissions(token: str, org: str):
             f"Token is missing required permissions. In your fine-grained PAT settings, "
             f"enable these:\n\n    {perms_list}\n\n"
             f"See 'gh-auditor --help' for full setup instructions."
-        )
-
-
-# ---- Fine-grained PAT: write permission rejection ----
-
-def _check_no_write_permissions(token: str, org: str):
-    """Verify the fine-grained PAT does NOT have any write permissions.
-
-    Probes write-only API endpoints with invalid payloads. If the API returns
-    422 (payload rejected but auth accepted), the token has write access.
-    403/404 means no write access (expected).
-    """
-    headers = _auth_headers(token)
-
-    # Probe 1: Repository write — attempt to create a repo with invalid name
-    resp = requests.post(
-        f"{GITHUB_API}/orgs/{org}/repos",
-        headers=headers,
-        json={"name": ""},  # empty name always fails validation
-        timeout=30,
-    )
-    logger.debug("Repo write probe: %d", resp.status_code)
-    if resp.status_code == 422:
-        raise TokenPermissionError(
-            "Token has WRITE access to organization repositories (can create repos). "
-            "This tool requires a read-only token. Please create a new fine-grained PAT "
-            "with only 'Read' permissions. See 'gh-auditor --help' for setup instructions."
-        )
-
-    # Probe 2: Org admin write — attempt to update org settings with no-op
-    resp = requests.patch(
-        f"{GITHUB_API}/orgs/{org}",
-        headers=headers,
-        json={"company": ""},
-        timeout=30,
-    )
-    logger.debug("Org admin write probe: %d", resp.status_code)
-    if resp.status_code in (200, 422):
-        raise TokenPermissionError(
-            "Token has ADMIN/WRITE access to organization settings. "
-            "This tool requires a read-only token. Please create a new fine-grained PAT "
-            "with only 'Read' permissions. See 'gh-auditor --help' for setup instructions."
         )
 
 

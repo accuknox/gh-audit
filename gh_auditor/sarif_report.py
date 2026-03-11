@@ -137,6 +137,31 @@ _RULE_HELP = {
         "short": "Action from a non-well-known publisher.",
         "help": "Review this action for trustworthiness and pin to a full commit SHA.",
     },
+    "BPR001": {
+        "name": "RequiredPullRequestReviews",
+        "short": "No required pull request reviews before merging.",
+        "help": "Enable 'Require pull request reviews before merging' with at least 1 required approving review.",
+    },
+    "BPR002": {
+        "name": "PushRestrictions",
+        "short": "Direct pushes or force pushes not restricted on protected branch.",
+        "help": "Enable push restrictions and 'Include administrators' to prevent direct or force pushes to the branch.",
+    },
+    "BPR003": {
+        "name": "RequiredStatusChecks",
+        "short": "Required status checks not configured on protected branch.",
+        "help": "Configure required status checks to ensure PRs pass CI before merging.",
+    },
+    "BPR004": {
+        "name": "DismissStaleReviews",
+        "short": "Stale reviews not dismissed when new commits are pushed.",
+        "help": "Enable 'Dismiss stale pull request approvals when new commits are pushed' to prevent unreviewed code from being merged.",
+    },
+    "BPR005": {
+        "name": "AllowDeletions",
+        "short": "Protected branch can be deleted.",
+        "help": "Disable 'Allow deletions' on the protected branch to prevent accidental or malicious branch removal.",
+    },
     "IAM001": {
         "name": "TooManyOrgAdmins",
         "short": "Organization has too many admin users.",
@@ -191,6 +216,81 @@ _RULE_HELP = {
         "name": "InactiveMember1Month",
         "short": "Member has no contributions in the last month.",
         "help": "May be normal (PTO, non-coding roles) but noted for awareness during access reviews.",
+    },
+    "BPR006": {
+        "name": "RequiredSignedCommits",
+        "short": "Signed commits not required on protected branch.",
+        "help": "Enable 'Require signed commits' to verify commit authenticity and prevent impersonation.",
+    },
+    "BPR007": {
+        "name": "RequireCodeOwnerReviews",
+        "short": "Code owner reviews not required on protected branch.",
+        "help": "Enable 'Require review from Code Owners' to ensure designated owners approve changes.",
+    },
+    "BPR008": {
+        "name": "DismissalRestrictions",
+        "short": "No dismissal restrictions on pull request reviews.",
+        "help": "Configure dismissal restrictions to limit who can dismiss pull request reviews.",
+    },
+    "BPR009": {
+        "name": "RequiredLinearHistory",
+        "short": "Linear history not required on protected branch.",
+        "help": "Enable 'Require linear history' to keep a clean, auditable commit history.",
+    },
+    "BPR010": {
+        "name": "RequiredConversationResolution",
+        "short": "Conversation resolution not required before merging.",
+        "help": "Enable 'Require conversation resolution' to ensure all review comments are addressed.",
+    },
+    "SEC001": {
+        "name": "SecretScanningDisabled",
+        "short": "Secret scanning not enabled on repository.",
+        "help": "Enable secret scanning to detect accidentally committed secrets like API keys and tokens.",
+    },
+    "SEC002": {
+        "name": "PushProtectionDisabled",
+        "short": "Secret scanning push protection not enabled.",
+        "help": "Enable push protection to block pushes that contain secrets before they reach the repository.",
+    },
+    "SEC003": {
+        "name": "DependabotSecurityUpdatesDisabled",
+        "short": "Dependabot security updates not enabled.",
+        "help": "Enable Dependabot security updates to automatically receive PRs fixing known vulnerabilities.",
+    },
+    "SEC004": {
+        "name": "NoCodeowners",
+        "short": "No CODEOWNERS file in repository.",
+        "help": "Add a CODEOWNERS file to define code ownership and automatically request reviews.",
+    },
+    "SEC005": {
+        "name": "NoSecurityPolicy",
+        "short": "No SECURITY.md file in repository.",
+        "help": "Add a SECURITY.md to tell users how to responsibly report vulnerabilities.",
+    },
+    "ORG001": {
+        "name": "TwoFactorNotRequired",
+        "short": "Organization does not require two-factor authentication.",
+        "help": "Enable 2FA requirement for all org members to prevent account compromise.",
+    },
+    "ORG002": {
+        "name": "DefaultRepoPermissionTooBroad",
+        "short": "Default repository permission is too broad.",
+        "help": "Set the default member permission to 'read' or 'none' and grant access through teams.",
+    },
+    "ORG003": {
+        "name": "AllActionsAllowed",
+        "short": "All GitHub Actions are allowed to run.",
+        "help": "Restrict allowed actions to 'selected' or 'local_only' to reduce supply chain risk.",
+    },
+    "ORG004": {
+        "name": "DefaultTokenWrite",
+        "short": "Default GITHUB_TOKEN has write permissions.",
+        "help": "Set the default GITHUB_TOKEN permission to 'read' and grant write explicitly per workflow.",
+    },
+    "ORG005": {
+        "name": "ForkPRWorkflowsNoApproval",
+        "short": "Fork PR workflows may run without approval.",
+        "help": "Require approval for all fork pull request workflows to prevent malicious execution.",
     },
 }
 
@@ -294,6 +394,35 @@ def generate_sarif_report(report: dict) -> dict:
 
         results.append(result)
 
+    # Org settings findings
+    for finding in report.get("org_settings", {}).get("findings", []):
+        rule_id = finding.get("rule_id", "UNKNOWN")
+        _ensure_rule(rules_seen, rule_id, finding)
+
+        result = {
+            "ruleId": _descriptive_rule_id(rule_id),
+            "level": SEVERITY_TO_SARIF_LEVEL.get(finding.get("severity", "info"), "note"),
+            "message": {
+                "text": finding.get("description", finding.get("title", "")),
+            },
+            "locations": [
+                {
+                    "logicalLocations": [
+                        {
+                            "name": report.get("audit_metadata", {}).get("organization", "org"),
+                            "kind": "namespace",
+                        }
+                    ],
+                }
+            ],
+            "properties": {
+                "severity": finding.get("severity", "info"),
+                "category": "org-settings",
+            },
+        }
+
+        results.append(result)
+
     # Build rule descriptors
     rules = []
     for rule_id in sorted(rules_seen.keys()):
@@ -320,6 +449,12 @@ def generate_sarif_report(report: dict) -> dict:
 
         if rule_id.startswith("IAM"):
             rule_desc["properties"]["tags"].append("identity")
+        elif rule_id.startswith("BPR"):
+            rule_desc["properties"]["tags"].append("branch-protection")
+        elif rule_id.startswith("SEC"):
+            rule_desc["properties"]["tags"].append("repo-security")
+        elif rule_id.startswith("ORG"):
+            rule_desc["properties"]["tags"].append("org-settings")
         else:
             rule_desc["properties"]["tags"].append("github-actions")
 

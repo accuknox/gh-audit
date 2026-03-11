@@ -7,6 +7,7 @@ gh_auditor/config.py
 gh_auditor/github_client.py
 gh_auditor/html_report.py
 gh_auditor/identity.py
+gh_auditor/org_settings.py
 gh_auditor/rules.py
 gh_auditor/sarif_report.py
 gh_auditor/token_validator.py
@@ -21,6 +22,7 @@ tests/test_auditor.py
 tests/test_config.py
 tests/test_html_report.py
 tests/test_identity.py
+tests/test_org_settings.py
 tests/test_rules.py
 tests/test_sarif_report.py
 tests/test_token_validator.py
