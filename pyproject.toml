@@ -21,3 +21,7 @@ dev = [
 
 [project.scripts]
 gh-auditor = "gh_auditor.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["gh_auditor*"]
+exclude = ["tests*", "res*"]
