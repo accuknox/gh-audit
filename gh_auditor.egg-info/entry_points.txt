@@ -1,2 +1,0 @@
-[console_scripts]
-gh-auditor = gh_auditor.cli:main

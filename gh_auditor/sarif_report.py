@@ -477,12 +477,15 @@ def generate_sarif_report(report: dict) -> dict:
                 "invocations": [
                     {
                         "executionSuccessful": True,
-                        "workingDirectory": {
-                            "uri": report.get("audit_metadata", {}).get("organization", "")
+                        "properties": {
                             "organization": report.get("audit_metadata", {}).get("organization", ""),
                             "timestamp": report.get("audit_metadata", {}).get("timestamp", ""),
                             "totalReposScanned": report.get("audit_metadata", {}).get("total_repos_scanned", 0),
                             "totalWorkflowsScanned": report.get("audit_metadata", {}).get("total_workflows_scanned", 0),
+                        },
+                        "workingDirectory": {
+                            "uri": report.get("audit_metadata", {}).get("organization", ""),
+                            "organization": report.get("audit_metadata", {}).get("organization", ""),
                         },
                     }
                 ],
