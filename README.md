@@ -1,6 +1,6 @@
-# gh-auditor
+# Dev Pipeline Auditor
 
-Audit GitHub Actions workflows, branch protection, repository security features, and organization settings across an entire GitHub organization — or Azure DevOps projects.
+Audit workflows, branch protection, repository security features, and organization settings across an entire GitHub organization — or Azure DevOps projects.
 
 ![demo](res/demo.gif)
 
