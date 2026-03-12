@@ -10,13 +10,17 @@ import yaml
 from .auditor import AuditConfig, RepoSpec
 
 CONFIG_TOKEN_ENV = "GH_AUDIT_TOKEN"
+ADO_TOKEN_ENV = "ADO_AUDIT_TOKEN"
 
 
-def load_config(config_path: str) -> AuditConfig:
-    """Load and validate an AuditConfig from a YAML file.
+def load_config(config_path: str):
+    """Load and validate config from a YAML file.
 
-    The GitHub token is always read from the GH_AUDIT_TOKEN environment
-    variable, never from the config file, to avoid accidental secret leakage.
+    Returns either an AuditConfig (GitHub) or AdoAuditConfig (Azure)
+    plus output settings.
+
+    The token is always read from environment variables, never from the
+    config file, to avoid accidental secret leakage.
     """
     path = Path(config_path)
     if not path.exists():
@@ -28,6 +32,33 @@ def load_config(config_path: str) -> AuditConfig:
     if not isinstance(raw, dict):
         raise ValueError(f"Config file must be a YAML mapping, got {type(raw).__name__}")
 
+    platform = raw.get("platform", "github")
+
+    # Org (required)
+    org = raw.get("org")
+    if not org or not isinstance(org, str):
+        raise ValueError("Config file must specify 'org' as a non-empty string.")
+
+    updated_within = raw.get("updated_within_months")
+    if updated_within is not None:
+        updated_within = int(updated_within)
+
+    extras = (
+        raw.get("output", "-"),
+        raw.get("verbosity", 0),
+        raw.get("html_output", None),
+        raw.get("sarif_output", None),
+        raw.get("log_file", None),
+    )
+
+    if platform == "azure":
+        return _load_ado_config(raw, org, updated_within), *extras
+
+    return _load_github_config(raw, org, updated_within), *extras
+
+
+def _load_github_config(raw: dict, org: str, updated_within) -> AuditConfig:
+    """Load GitHub-specific config."""
     # Token from environment
     token = os.environ.get(CONFIG_TOKEN_ENV, "").strip()
     if not token:
@@ -36,11 +67,6 @@ def load_config(config_path: str) -> AuditConfig:
             f"Export your read-only GitHub token:\n"
             f"  export {CONFIG_TOKEN_ENV}=ghp_..."
         )
-
-    # Org (required)
-    org = raw.get("org")
-    if not org or not isinstance(org, str):
-        raise ValueError("Config file must specify 'org' as a non-empty string.")
 
     # Repo specs (supports exact names and regex patterns)
     repo_specs = []
@@ -59,10 +85,6 @@ def load_config(config_path: str) -> AuditConfig:
             spec.is_regex = is_regex
             repo_specs.append(spec)
 
-    updated_within = raw.get("updated_within_months")
-    if updated_within is not None:
-        updated_within = int(updated_within)
-
     return AuditConfig(
         org=org,
         token=token,
@@ -72,8 +94,37 @@ def load_config(config_path: str) -> AuditConfig:
         skip_identity=bool(raw.get("skip_identity", False)),
         skip_repo_security=bool(raw.get("skip_repo_security", False)),
         skip_org_settings=bool(raw.get("skip_org_settings", False)),
+        skip_apps_and_tokens=bool(raw.get("skip_apps_and_tokens", False)),
         updated_within_months=updated_within,
-    ), raw.get("output", "-"), raw.get("verbosity", 0), raw.get("html_output", None), raw.get("sarif_output", None), raw.get("log_file", None)
+    )
+
+
+def _load_ado_config(raw: dict, org: str, updated_within):
+    """Load Azure DevOps-specific config."""
+    from .azure.ado_auditor import AdoAuditConfig
+
+    # Token from environment
+    token = os.environ.get(ADO_TOKEN_ENV, "").strip()
+    if not token:
+        token = os.environ.get(CONFIG_TOKEN_ENV, "").strip()
+    if not token:
+        raise ValueError(
+            f"Environment variable {ADO_TOKEN_ENV} is not set. "
+            f"Export your Azure DevOps PAT:\n"
+            f"  export {ADO_TOKEN_ENV}=..."
+        )
+
+    return AdoAuditConfig(
+        org=org,
+        token=token,
+        projects=raw.get("projects", []) or [],
+        repos=raw.get("repos", []) or [],
+        skip_identity=bool(raw.get("skip_identity", False)),
+        skip_project_settings=bool(raw.get("skip_project_settings", False)),
+        skip_pipeline_security=bool(raw.get("skip_pipeline_security", False)),
+        include_disabled_repos=bool(raw.get("include_disabled_repos", False)),
+        updated_within_months=updated_within,
+    )
 
 
 def _parse_repo_entry(repo_str: str, default_org: str) -> RepoSpec:

@@ -41,9 +41,11 @@ def main():
             "       Administration .... Read-only  (needed to list repo collaborators)\n"
             "       Contents .......... Read-only  (needed to read workflow YAML files)\n"
             "       Metadata .......... Read-only  (auto-granted, lists repositories)\n\n"
-            "  5. Under 'Organization permissions', set this to 'Read-only':\n"
+            "  5. Under 'Organization permissions', set these to 'Read-only':\n"
             "       Members ........... Read-only  (needed to list org owners, teams,\n"
-            "                                       outside collaborators, invitations)\n\n"
+            "                                       outside collaborators, invitations)\n"
+            "       Administration .... Read-only  (needed for Apps & Tokens audit;\n"
+            "                                       optional, audit degrades gracefully)\n\n"
             "  6. Leave ALL other permissions as 'No access'.\n"
             "     Do NOT grant any 'Read and write' or 'Admin' permissions.\n"
             "     The tool will reject tokens with write access at startup.\n\n"
@@ -51,6 +53,12 @@ def main():
             f"       export {CONFIG_TOKEN_ENV}=github_pat_...\n"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--platform",
+        choices=["github", "azure"],
+        default="github",
+        help="Platform to audit: 'github' (default) or 'azure' (Azure DevOps).",
     )
     parser.add_argument(
         "--config", "-c",
@@ -79,6 +87,12 @@ def main():
             "Wrap in /.../ for regex matching: '/frontend-.*/'. "
             "If owner is omitted, --org is used."
         ),
+    )
+    parser.add_argument(
+        "--projects",
+        nargs="*",
+        metavar="PROJECT",
+        help="(Azure DevOps) Specific projects to audit.",
     )
     parser.add_argument(
         "--output", "-o",
@@ -113,6 +127,12 @@ def main():
         help="Skip the identity/access audit (org members, teams, collaborators).",
     )
     parser.add_argument(
+        "--skip-apps-tokens",
+        action="store_true",
+        default=None,
+        help="Skip the GitHub Apps & fine-grained PATs audit.",
+    )
+    parser.add_argument(
         "--updated-within",
         type=int,
         metavar="MONTHS",
@@ -138,10 +158,15 @@ def main():
 
     args = parser.parse_args()
 
+    platform = args.platform
+
     # Load config file if provided, then overlay CLI args
     if args.config:
         try:
             config, cfg_output, cfg_verbosity, cfg_html, cfg_sarif, cfg_log = load_config(args.config)
+            # Config file may specify platform
+            if hasattr(config, "platform"):
+                platform = config.platform
         except (FileNotFoundError, ValueError) as e:
             print(f"ERROR: {e}", file=sys.stderr)
             sys.exit(1)
@@ -152,6 +177,10 @@ def main():
         cfg_html = None
         cfg_sarif = None
         cfg_log = None
+
+    # CLI --platform always wins
+    if args.platform != "github":
+        platform = args.platform
 
     # Resolve final values: CLI args override config file
     token = args.token or (config.token if config else None)
@@ -164,11 +193,21 @@ def main():
     include_archived = args.include_archived if args.include_archived is not None else (config.include_archived if config else False)
     include_forks = args.include_forks if args.include_forks is not None else (config.include_forks if config else False)
     skip_identity = args.skip_identity if args.skip_identity is not None else (config.skip_identity if config else False)
+    skip_apps_tokens = args.skip_apps_tokens if args.skip_apps_tokens is not None else (getattr(config, "skip_apps_and_tokens", False) if config else False)
     updated_within = args.updated_within if args.updated_within is not None else (config.updated_within_months if config else None)
 
+    # Token env var differs by platform
+    import os
     if not token:
+        if platform == "azure":
+            token = os.environ.get("ADO_AUDIT_TOKEN", "").strip()
+        if not token:
+            token = os.environ.get(CONFIG_TOKEN_ENV, "").strip()
+
+    if not token:
+        env_var = "ADO_AUDIT_TOKEN" if platform == "azure" else CONFIG_TOKEN_ENV
         print(
-            f"ERROR: No token provided. Use --token or set {CONFIG_TOKEN_ENV} "
+            f"ERROR: No token provided. Use --token or set {env_var} "
             f"environment variable.",
             file=sys.stderr,
         )
@@ -213,64 +252,116 @@ def main():
 
     console = Console(stderr=True)
 
-    # Validate token
-    if use_tui:
-        console.print("[bold blue]Validating token...[/bold blue]")
-    try:
-        user_info = validate_token(token, org)
+    # Platform-specific validation and audit
+    if platform == "azure":
+        # Azure DevOps flow
+        from .azure.ado_token_validator import AdoTokenError, validate_ado_token
+        from .azure.ado_auditor import AdoAuditConfig, run_ado_audit
+
         if use_tui:
-            console.print(
-                f"[green]Authenticated as:[/green] {user_info.get('login', 'unknown')}"
-            )
-        logging.info(
-            "Authenticated as: %s", user_info.get("login", "unknown")
+            console.print("[bold blue]Validating Azure DevOps token...[/bold blue]")
+        try:
+            ado_info = validate_ado_token(org, token)
+            if use_tui:
+                console.print(
+                    f"[green]Authenticated to Azure DevOps org:[/green] {ado_info.get('organization', org)}"
+                )
+            logging.info("Authenticated to ADO org: %s", org)
+        except AdoTokenError as e:
+            console.print(f"[bold red]ERROR:[/bold red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            console.print(f"[bold red]ERROR:[/bold red] Token validation failed: {e}")
+            sys.exit(1)
+
+        ado_config = AdoAuditConfig(
+            org=org,
+            token=token,
+            projects=args.projects or (getattr(config, "projects", []) if config else []),
+            repos=args.repos or [],
+            skip_identity=skip_identity,
+            updated_within_months=updated_within,
         )
-    except TokenPermissionError as e:
-        console.print(f"[bold red]ERROR:[/bold red] {e}")
-        sys.exit(1)
-    except Exception as e:
-        console.print(f"[bold red]ERROR:[/bold red] Token validation failed: {e}")
-        sys.exit(1)
 
-    # Parse repo specs: CLI --repos overrides config file repos
-    repo_specs = []
-    if args.repos:
-        for spec_str in args.repos:
-            repo_specs.append(_parse_repo_spec(spec_str, org))
-    elif config and config.repo_specs:
-        repo_specs = config.repo_specs
+        tui = AuditTUI(console=console) if use_tui else None
+        try:
+            if tui:
+                tui.start()
+            report = run_ado_audit(ado_config, progress=tui)
+            if tui:
+                tui.update_severity_counts(report)
+                tui.stop()
+                tui.print_summary(report)
+        except KeyboardInterrupt:
+            if tui:
+                tui.stop()
+            console.print("\n[yellow]Audit interrupted.[/yellow]")
+            sys.exit(130)
+        except Exception as e:
+            if tui:
+                tui.stop()
+            console.print(f"[bold red]ERROR:[/bold red] Audit failed: {e}")
+            sys.exit(1)
+    else:
+        # GitHub flow (existing)
+        if use_tui:
+            console.print("[bold blue]Validating token...[/bold blue]")
+        try:
+            user_info = validate_token(token, org)
+            if use_tui:
+                console.print(
+                    f"[green]Authenticated as:[/green] {user_info.get('login', 'unknown')}"
+                )
+            logging.info(
+                "Authenticated as: %s", user_info.get("login", "unknown")
+            )
+        except TokenPermissionError as e:
+            console.print(f"[bold red]ERROR:[/bold red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            console.print(f"[bold red]ERROR:[/bold red] Token validation failed: {e}")
+            sys.exit(1)
 
-    audit_config = AuditConfig(
-        org=org,
-        token=token,
-        repo_specs=repo_specs,
-        include_archived=include_archived,
-        include_forks=include_forks,
-        skip_identity=skip_identity,
-        updated_within_months=updated_within,
-    )
+        # Parse repo specs: CLI --repos overrides config file repos
+        repo_specs = []
+        if args.repos:
+            for spec_str in args.repos:
+                repo_specs.append(_parse_repo_spec(spec_str, org))
+        elif config and config.repo_specs:
+            repo_specs = config.repo_specs
 
-    # Run the audit
-    tui = AuditTUI(console=console) if use_tui else None
+        audit_config = AuditConfig(
+            org=org,
+            token=token,
+            repo_specs=repo_specs,
+            include_archived=include_archived,
+            include_forks=include_forks,
+            skip_identity=skip_identity,
+            skip_apps_and_tokens=skip_apps_tokens,
+            updated_within_months=updated_within,
+        )
 
-    try:
-        if tui:
-            tui.start()
-        report = run_audit(audit_config, progress=tui)
-        if tui:
-            tui.update_severity_counts(report)
-            tui.stop()
-            tui.print_summary(report)
-    except KeyboardInterrupt:
-        if tui:
-            tui.stop()
-        console.print("\n[yellow]Audit interrupted.[/yellow]")
-        sys.exit(130)
-    except Exception as e:
-        if tui:
-            tui.stop()
-        console.print(f"[bold red]ERROR:[/bold red] Audit failed: {e}")
-        sys.exit(1)
+        # Run the audit
+        tui = AuditTUI(console=console) if use_tui else None
+
+        try:
+            if tui:
+                tui.start()
+            report = run_audit(audit_config, progress=tui)
+            if tui:
+                tui.update_severity_counts(report)
+                tui.stop()
+                tui.print_summary(report)
+        except KeyboardInterrupt:
+            if tui:
+                tui.stop()
+            console.print("\n[yellow]Audit interrupted.[/yellow]")
+            sys.exit(130)
+        except Exception as e:
+            if tui:
+                tui.stop()
+            console.print(f"[bold red]ERROR:[/bold red] Audit failed: {e}")
+            sys.exit(1)
 
     # Output JSON report
     report_json = json.dumps(report, indent=2)

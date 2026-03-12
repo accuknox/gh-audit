@@ -14,6 +14,7 @@ import yaml
 from .github_client import GitHubClient
 from .identity import audit_identity
 from .rules import ALL_RULES, Finding
+from .scoring import enrich_report
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +44,7 @@ class AuditConfig:
     skip_identity: bool = False
     skip_repo_security: bool = False
     skip_org_settings: bool = False
+    skip_apps_and_tokens: bool = False
     updated_within_months: int | None = None  # Only scan repos updated within N months
 
 
@@ -59,6 +61,9 @@ class ProgressCallback(Protocol):
     def on_identity_start(self) -> None: ...
     def on_identity_status(self, message: str) -> None: ...
     def on_identity_done(self, findings_count: int, severity_counts: dict[str, int] | None = None) -> None: ...
+    def on_apps_tokens_start(self) -> None: ...
+    def on_apps_tokens_status(self, message: str) -> None: ...
+    def on_apps_tokens_done(self, findings_count: int, severity_counts: dict[str, int] | None = None) -> None: ...
 
 
 class NullProgress:
@@ -73,6 +78,9 @@ class NullProgress:
     def on_identity_start(self) -> None: pass
     def on_identity_status(self, message: str) -> None: pass
     def on_identity_done(self, findings_count: int, severity_counts: dict[str, int] | None = None) -> None: pass
+    def on_apps_tokens_start(self) -> None: pass
+    def on_apps_tokens_status(self, message: str) -> None: pass
+    def on_apps_tokens_done(self, findings_count: int, severity_counts: dict[str, int] | None = None) -> None: pass
 
 
 def run_audit(
@@ -173,6 +181,35 @@ def run_audit(
             logger.warning("Identity audit failed: %s", e)
             report["identity"] = {"error": str(e), "findings": []}
             progress.on_identity_done(0)
+
+    # Apps & tokens audit
+    if not config.skip_apps_and_tokens:
+        progress.on_apps_tokens_start()
+        try:
+            from .apps_and_tokens import audit_apps_and_tokens
+            apps_tokens_report = audit_apps_and_tokens(
+                client, config.org,
+                on_status=lambda msg: progress.on_apps_tokens_status(msg),
+            )
+            report["apps_and_tokens"] = apps_tokens_report
+
+            apps_tokens_severity_counts: dict[str, int] = {}
+            for finding in apps_tokens_report["findings"]:
+                sev = finding.get("severity", "info")
+                report["audit_metadata"]["total_findings"] += 1
+                report["audit_metadata"]["findings_by_severity"][sev] = (
+                    report["audit_metadata"]["findings_by_severity"].get(sev, 0) + 1
+                )
+                apps_tokens_severity_counts[sev] = apps_tokens_severity_counts.get(sev, 0) + 1
+
+            progress.on_apps_tokens_done(len(apps_tokens_report["findings"]), apps_tokens_severity_counts)
+        except Exception as e:
+            logger.warning("Apps & tokens audit failed: %s", e)
+            report["apps_and_tokens"] = {"error": str(e), "findings": []}
+            progress.on_apps_tokens_done(0)
+
+    # Compute risk scores
+    enrich_report(report)
 
     return report
 

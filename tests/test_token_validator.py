@@ -64,11 +64,18 @@ class TestCheckRequiredReadPermissions:
             json=[],
             status=200,
         )
-        # Administration: Read
+        # Administration: Read (repo-level)
         responses.add(
             responses.GET,
             f"{GITHUB_API}/repos/myorg/repo1/collaborators",
             json=[{"login": "user1"}],
+            status=200,
+        )
+        # Administration: Read (org-level, for apps & tokens)
+        responses.add(
+            responses.GET,
+            f"{GITHUB_API}/orgs/myorg/installations",
+            json={"total_count": 0, "installations": []},
             status=200,
         )
         # Should not raise
@@ -100,6 +107,12 @@ class TestCheckRequiredReadPermissions:
             json=[],
             status=200,
         )
+        responses.add(
+            responses.GET,
+            f"{GITHUB_API}/orgs/myorg/installations",
+            json={"total_count": 0, "installations": []},
+            status=200,
+        )
         with pytest.raises(TokenPermissionError, match="Members.*Read-only"):
             _check_required_read_permissions("bad-token", "myorg")
 
@@ -127,6 +140,12 @@ class TestCheckRequiredReadPermissions:
             responses.GET,
             f"{GITHUB_API}/repos/myorg/repo1/collaborators",
             json=[],
+            status=200,
+        )
+        responses.add(
+            responses.GET,
+            f"{GITHUB_API}/orgs/myorg/installations",
+            json={"total_count": 0, "installations": []},
             status=200,
         )
         with pytest.raises(TokenPermissionError, match="Contents.*Read-only"):
@@ -163,6 +182,12 @@ class TestCheckRequiredReadPermissions:
             status=403,
             json={"message": "Resource not accessible"},
         )
+        responses.add(
+            responses.GET,
+            f"{GITHUB_API}/orgs/myorg/installations",
+            json={"total_count": 0, "installations": []},
+            status=200,
+        )
         # Should not raise — admin read is optional
         _check_required_read_permissions("limited-token", "myorg")
 
@@ -191,6 +216,12 @@ class TestCheckRequiredReadPermissions:
             responses.GET,
             f"{GITHUB_API}/repos/myorg/repo1/collaborators",
             json=[],
+            status=200,
+        )
+        responses.add(
+            responses.GET,
+            f"{GITHUB_API}/orgs/myorg/installations",
+            json={"total_count": 0, "installations": []},
             status=200,
         )
         # Should not raise — 404 is fine, it just means no .github dir
@@ -269,6 +300,12 @@ class TestValidateToken:
             json=[],
             status=200,
         )
+        responses.add(
+            responses.GET,
+            f"{GITHUB_API}/orgs/myorg/installations",
+            json={"total_count": 0, "installations": []},
+            status=200,
+        )
 
         result = validate_token("fine-grained-ro", "myorg")
         assert result["login"] == "testuser"
@@ -293,6 +330,12 @@ class TestValidateToken:
             responses.GET,
             f"{GITHUB_API}/orgs/myorg/repos",
             json=[],
+            status=200,
+        )
+        responses.add(
+            responses.GET,
+            f"{GITHUB_API}/orgs/myorg/installations",
+            json={"total_count": 0, "installations": []},
             status=200,
         )
         with pytest.raises(TokenPermissionError, match="missing required permissions"):

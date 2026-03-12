@@ -34,12 +34,15 @@ def generate_html_report(report: dict) -> str:
     # Build nav items dynamically based on what sections exist
     nav_items = _build_nav_items(report)
 
+    platform = meta.get("platform", "github")
+    platform_label = "Azure DevOps" if platform == "azure" else "GitHub"
+
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AccuKnox GitHub Audit &mdash; {_esc(meta['organization'])}</title>
+<title>AccuKnox {platform_label} Audit &mdash; {_esc(meta['organization'])}</title>
 <style>
 {_CSS}
 </style>
@@ -48,7 +51,7 @@ def generate_html_report(report: dict) -> str:
 
 <header>
   <div class="container">
-    <h1>AccuKnox GitHub Audit Report</h1>
+    <h1>AccuKnox {platform_label} Audit Report</h1>
     <p class="subtitle">
       Organization: <strong>{_esc(meta['organization'])}</strong>
       &middot; Generated: <strong>{_format_ts(meta['timestamp'])}</strong>
@@ -70,6 +73,7 @@ def generate_html_report(report: dict) -> str:
 
 <!-- Summary Cards -->
 <section class="summary-grid" id="sec-summary">
+  {_render_org_score_card(meta.get("org_score"))}
   <div class="card stat-card">
     <div class="stat-number">{meta['total_repos_scanned']}</div>
     <div class="stat-label">Repos Scanned</div>
@@ -128,6 +132,8 @@ def generate_html_report(report: dict) -> str:
 
 {_render_org_settings_section(report.get("org_settings"))}
 
+{_render_apps_and_tokens_section(report.get("apps_and_tokens"))}
+
 <!-- Per-Repo Details -->
 <section class="card collapsible" id="sec-repos">
   <h2 class="section-toggle" onclick="toggleSection(this)">
@@ -179,6 +185,48 @@ def write_html_report(report: dict, path: str) -> None:
 # Helpers
 # ---------------------------------------------------------------------------
 
+def _grade_color(grade: str) -> str:
+    """Return a CSS color for a letter grade."""
+    if grade.startswith("A"):
+        return "#16a34a"
+    if grade.startswith("B"):
+        return "#2563eb"
+    if grade.startswith("C"):
+        return "#ca8a04"
+    if grade.startswith("D"):
+        return "#ea580c"
+    return "#dc2626"
+
+
+def _render_org_score_card(org_score: dict | None) -> str:
+    """Render the org-level score as a summary card."""
+    if not org_score:
+        return ""
+    score = org_score["score"]
+    grade = org_score["grade"]
+    color = _grade_color(grade)
+    return (
+        f'<div class="card stat-card">'
+        f'<div class="stat-number" style="color:{color}">{grade}</div>'
+        f'<div class="stat-label">Org Score: {score}/100</div>'
+        f'</div>'
+    )
+
+
+def _render_repo_score_badge(score_data: dict | None) -> str:
+    """Render an inline score badge for a repo header."""
+    if not score_data:
+        return ""
+    grade = score_data["grade"]
+    score = score_data["score"]
+    color = _grade_color(grade)
+    return (
+        f'<span class="score-badge" style="background:{color};color:#fff;'
+        f'padding:2px 8px;border-radius:4px;font-size:0.75rem;font-weight:700;'
+        f'margin-left:8px" title="Risk score: {score}/100">{grade} ({score})</span>'
+    )
+
+
 def _esc(text: str) -> str:
     return html.escape(str(text))
 
@@ -211,6 +259,9 @@ def _build_nav_items(report: dict) -> str:
     org_settings = report.get("org_settings")
     if org_settings and "error" not in org_settings:
         items.append(("sec-org-settings", "Org Settings"))
+    apps_tokens = report.get("apps_and_tokens")
+    if apps_tokens and "error" not in apps_tokens:
+        items.append(("sec-apps-tokens", "Apps & Tokens"))
     items.append(("sec-repos", "Repositories"))
     return "".join(
         f'<a class="nav-link" href="#{sid}">{label}</a>'
@@ -357,6 +408,7 @@ def _render_repo_sections(repos: list[dict]) -> str:
         <span class="repo-branch">@ {_esc(repo['branch'])}</span>
         {visibility_badge}
         {_severity_badge(highest) if findings else '<span class="badge" style="background:#d1fae5;color:#065f46">CLEAN</span>'}
+        {_render_repo_score_badge(repo.get("score"))}
         <span class="repo-count">{count_str} &middot; {repo['workflows_scanned']} workflow(s)</span>
       </div>
       <div class="repo-body">
@@ -509,6 +561,87 @@ def _render_org_settings_section(org_settings: dict | None) -> str:
   </h2>
   <div class="section-body">
     <p class="empty">No organization settings findings.</p>
+  </div>
+</section>""")
+
+    return "\n".join(parts)
+
+
+def _render_apps_and_tokens_section(apps_tokens: dict | None) -> str:
+    """Render the Apps & Tokens audit section."""
+    if not apps_tokens or "error" in apps_tokens:
+        return ""
+
+    findings = apps_tokens.get("findings", [])
+    app_count = len(apps_tokens.get("app_installations", []))
+    pat_count = len(apps_tokens.get("fine_grained_pats", []))
+
+    parts = []
+
+    # Summary cards
+    parts.append(f"""
+<section class="summary-grid">
+  <div class="card stat-card">
+    <div class="stat-number">{app_count}</div>
+    <div class="stat-label">App Installations</div>
+  </div>
+  <div class="card stat-card">
+    <div class="stat-number">{pat_count}</div>
+    <div class="stat-label">Fine-Grained PATs</div>
+  </div>
+  <div class="card stat-card">
+    <div class="stat-number">{len(findings)}</div>
+    <div class="stat-label">Findings</div>
+  </div>
+</section>""")
+
+    # Findings table
+    if findings:
+        sev_counts: dict[str, int] = {}
+        for f in findings:
+            s = f.get("severity", "info")
+            sev_counts[s] = sev_counts.get(s, 0) + 1
+
+        rows = []
+        for f in findings:
+            rows.append(
+                f'<tr class="finding-row" data-severity="{_esc(f.get("severity", "info"))}">'
+                f'<td><code>{_esc(f.get("rule_id", ""))}</code></td>'
+                f'<td>{_severity_badge(f.get("severity", "info"))}</td>'
+                f'<td>'
+                f'<div class="finding-title">{_esc(f.get("title", ""))}</div>'
+                f'<div class="finding-desc">{_esc(f.get("description", ""))}</div>'
+                f'</td></tr>'
+            )
+
+        sev_filter_btns = '<button class="filter-btn active" onclick="filterAppsTokensSeverity(\'all\', this)">All</button>'
+        for s in SEVERITY_ORDER:
+            if sev_counts.get(s, 0) > 0:
+                sev_filter_btns += f'<button class="filter-btn" onclick="filterAppsTokensSeverity(\'{s}\', this)">{s.upper()} ({sev_counts[s]})</button>'
+
+        parts.append(f"""
+<section class="card collapsible" id="sec-apps-tokens">
+  <h2 class="section-toggle" onclick="toggleSection(this)">
+    <span class="toggle-icon open">&#9660;</span> Apps &amp; Tokens Findings ({len(findings)})
+  </h2>
+  <div class="section-body">
+    <div class="filter-buttons" id="apps-tokens-severity-filters">
+      {sev_filter_btns}
+    </div>
+    <table class="data-table" id="apps-tokens-table">
+      <thead><tr><th style="width:80px">Rule</th><th style="width:90px">Severity</th><th>Details</th></tr></thead>
+      <tbody>{"".join(rows)}</tbody>
+    </table>
+  </div>
+</section>""")
+    else:
+        parts.append("""
+<section class="card collapsible" id="sec-apps-tokens">
+  <h2 class="section-toggle" onclick="toggleSection(this)">
+    <span class="toggle-icon open">&#9660;</span> Apps &amp; Tokens Findings
+  </h2>
+  <div class="section-body">
+    <p class="empty">No apps &amp; tokens findings.</p>
   </div>
 </section>""")
 

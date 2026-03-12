@@ -242,11 +242,35 @@ class GitHubClient:
         return resp.json()
 
     # -----------------------------------------------------------------
+    # Apps & tokens endpoints
+    # -----------------------------------------------------------------
+
+    def list_org_installations(self, org: str) -> list[dict]:
+        """List GitHub App installations for the organization."""
+        return self._paginate(
+            f"{GITHUB_API}/orgs/{org}/installations",
+            params={"per_page": 100},
+            key="installations",
+        )
+
+    def list_org_fine_grained_pats(self, org: str) -> list[dict]:
+        """List fine-grained personal access tokens approved for the org."""
+        return self._paginate(
+            f"{GITHUB_API}/orgs/{org}/personal-access-tokens",
+            params={"per_page": 100},
+        )
+
+    # -----------------------------------------------------------------
     # Helpers
     # -----------------------------------------------------------------
 
-    def _paginate(self, url: str, params: dict | None = None) -> list[dict]:
-        """Generic paginated GET that returns all items."""
+    def _paginate(self, url: str, params: dict | None = None, key: str | None = None) -> list[dict]:
+        """Generic paginated GET that returns all items.
+
+        Args:
+            key: If set, unwrap envelope-style responses by extracting
+                 ``data[key]`` from each page (e.g. ``"installations"``).
+        """
         items = []
         while url:
             resp = self._session.get(url, params=params, timeout=30)
@@ -256,6 +280,8 @@ class GitHubClient:
                 break
             resp.raise_for_status()
             data = resp.json()
+            if key and isinstance(data, dict):
+                data = data.get(key, [])
             if isinstance(data, list):
                 items.extend(data)
             url = resp.links.get("next", {}).get("url")

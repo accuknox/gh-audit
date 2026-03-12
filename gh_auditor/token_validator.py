@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 # Required fine-grained PAT permissions (all read-only):
 #   Repository:  Administration (Read), Contents (Read), Metadata (Read, auto-granted)
-#   Organization: Members (Read)
+#   Organization: Members (Read), Administration (Read)
 # Maps each required permission to its section in the GitHub fine-grained PAT UI.
 # Format: "Section heading → Permission name" : "Access level"
 REQUIRED_PERMISSIONS = {
@@ -18,6 +18,7 @@ REQUIRED_PERMISSIONS = {
     "Repository permissions → Contents": "Read-only",
     "Repository permissions → Metadata": "Read-only (auto-granted)",
     "Organization permissions → Members": "Read-only",
+    "Organization permissions → Administration": "Read-only",
 }
 
 
@@ -185,6 +186,23 @@ def _check_required_read_permissions(token: str, org: str):
                     "      The audit will continue but some checks will be skipped."
                 )
             logger.debug("Admin read check on %s: %d", repo_full_name, resp.status_code)
+
+    # Check: Organization permissions → Administration → Read-only
+    # Optional — needed for Apps & Tokens audit (APP/PAT rules).
+    # The audit degrades gracefully if this is missing.
+    resp = requests.get(
+        f"{GITHUB_API}/orgs/{org}/installations",
+        headers=headers,
+        params={"per_page": 1},
+        timeout=30,
+    )
+    if resp.status_code == 403:
+        warnings.append(
+            "Organization permissions → Administration → Read-only\n"
+            "      (needed for GitHub App installations and fine-grained PAT audit)\n"
+            "      The audit will continue but Apps & Tokens checks will be skipped."
+        )
+    logger.debug("Org administration read check: %d", resp.status_code)
 
     if warnings:
         for w in warnings:

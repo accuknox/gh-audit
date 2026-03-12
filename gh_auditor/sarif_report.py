@@ -292,6 +292,207 @@ _RULE_HELP = {
         "short": "Fork PR workflows may run without approval.",
         "help": "Require approval for all fork pull request workflows to prevent malicious execution.",
     },
+    # GitHub Apps & Tokens (APP001-APP005, PAT001-PAT005)
+    "APP001": {
+        "name": "InactiveAppInstallation",
+        "short": "GitHub App installation inactive for over 90 days.",
+        "help": "Review whether this app installation is still needed and uninstall if not.",
+    },
+    "APP002": {
+        "name": "OverlyPermissiveApp",
+        "short": "GitHub App has write/admin on sensitive scopes.",
+        "help": "Verify the app needs elevated permissions and follow least-privilege principles.",
+    },
+    "APP003": {
+        "name": "AppAllRepoAccess",
+        "short": "GitHub App has access to all repositories.",
+        "help": "Restrict the app to specific repositories rather than granting org-wide access.",
+    },
+    "APP004": {
+        "name": "SuspendedAppInstalled",
+        "short": "GitHub App is suspended but still installed.",
+        "help": "Uninstall suspended apps that are no longer needed.",
+    },
+    "APP005": {
+        "name": "AppSensitiveEvents",
+        "short": "GitHub App subscribes to sensitive webhook events.",
+        "help": "Ensure the app needs these events and the webhook endpoint is secure.",
+    },
+    "PAT001": {
+        "name": "PatNoExpiration",
+        "short": "Fine-grained PAT has no expiration date.",
+        "help": "Set an expiration on all tokens and rotate regularly.",
+    },
+    "PAT002": {
+        "name": "InactivePat",
+        "short": "Fine-grained PAT not used in over 90 days.",
+        "help": "Revoke unused tokens to reduce attack surface.",
+    },
+    "PAT003": {
+        "name": "OverlyPermissivePat",
+        "short": "Fine-grained PAT has write/admin on sensitive scopes.",
+        "help": "Verify the token needs elevated permissions and follow least-privilege principles.",
+    },
+    "PAT004": {
+        "name": "PatAllRepoAccess",
+        "short": "Fine-grained PAT has access to all repositories.",
+        "help": "Restrict the token to specific repositories.",
+    },
+    "PAT005": {
+        "name": "ExpiredPatListed",
+        "short": "Expired fine-grained PAT still listed in organization.",
+        "help": "Remove expired tokens from the organization.",
+    },
+    # Azure DevOps: Pipeline Security (AZP001-AZP008)
+    "AZP001": {
+        "name": "PersistCredentialsCheckout",
+        "short": "Checkout with persistCredentials: true leaves Git credentials for subsequent steps.",
+        "help": "Set persistCredentials: false in checkout steps to limit credential exposure.",
+    },
+    "AZP002": {
+        "name": "UnpinnedTemplateReference",
+        "short": "Template reference not pinned to a tag or commit SHA.",
+        "help": "Pin template references to @refs/tags/<tag> or a full commit SHA to prevent supply chain attacks.",
+    },
+    "AZP003": {
+        "name": "ServiceConnectionNoApproval",
+        "short": "Service connection used without environment approval gates.",
+        "help": "Add approval checks on environments or service connections to prevent unauthorized access.",
+    },
+    "AZP004": {
+        "name": "ScriptTargetsHost",
+        "short": "Script runs with target: host, bypassing container sandbox.",
+        "help": "Avoid target: host unless necessary. Use container isolation for build steps.",
+    },
+    "AZP005": {
+        "name": "SelfHostedAgentPublicProject",
+        "short": "Self-hosted agent used in a public project without demands or gates.",
+        "help": "Use Microsoft-hosted agents for public projects, or add demands and approval gates.",
+    },
+    "AZP006": {
+        "name": "ScriptInjection",
+        "short": "Attacker-controlled variable interpolated into script block.",
+        "help": "Use environment variable mappings instead of $() interpolation for untrusted variables.",
+    },
+    "AZP007": {
+        "name": "EnvironmentNoApprovalGate",
+        "short": "Environment has no approval checks configured.",
+        "help": "Add approval gates on environments to control deployments.",
+    },
+    "AZP008": {
+        "name": "SharedSecretVariableGroup",
+        "short": "Secret variable group shared broadly across projects.",
+        "help": "Restrict secret variable group access to specific pipelines only.",
+    },
+    # Azure DevOps: Branch Policies (ABP001-ABP007)
+    "ABP001": {
+        "name": "NoBranchPolicy",
+        "short": "No branch policy on default branch.",
+        "help": "Configure branch policies to enforce code review and build validation.",
+    },
+    "ABP002": {
+        "name": "MinimumReviewersNotConfigured",
+        "short": "Minimum reviewers not configured or set to zero.",
+        "help": "Add a minimum reviewer policy with at least 1 required reviewer.",
+    },
+    "ABP003": {
+        "name": "NoRequiredReviewers",
+        "short": "No required/code-owner reviewers policy.",
+        "help": "Add required reviewers to ensure designated owners approve changes.",
+    },
+    "ABP004": {
+        "name": "SelfApprovalAllowed",
+        "short": "PR creator can approve their own changes.",
+        "help": "Disable creatorVoteCounts to require independent review.",
+    },
+    "ABP005": {
+        "name": "NoBuildValidation",
+        "short": "No build validation policy on default branch.",
+        "help": "Add a build validation policy to ensure CI passes before merging.",
+    },
+    "ABP006": {
+        "name": "CommentResolutionNotRequired",
+        "short": "Comment resolution not required before merging.",
+        "help": "Add a comment resolution policy to ensure review feedback is addressed.",
+    },
+    "ABP007": {
+        "name": "NoMergeStrategyRestriction",
+        "short": "No merge strategy restriction on default branch.",
+        "help": "Restrict merge strategies to maintain a clean commit history.",
+    },
+    # Azure DevOps: Repository Security (ASC001-ASC004)
+    "ASC001": {
+        "name": "NoCredentialScanning",
+        "short": "No credential/secret scanning enabled.",
+        "help": "Enable Azure DevOps Advanced Security secret scanning to detect committed credentials.",
+    },
+    "ASC002": {
+        "name": "NoDependencyScanning",
+        "short": "No dependency scanning enabled.",
+        "help": "Enable dependency scanning to identify known vulnerabilities in packages.",
+    },
+    "ASC003": {
+        "name": "ForkingAllowedPublic",
+        "short": "Forking allowed on public repository.",
+        "help": "Restrict forking or add approval gates for fork PR pipelines.",
+    },
+    "ASC004": {
+        "name": "NoSecurityPolicy",
+        "short": "No SECURITY.md file in repository.",
+        "help": "Add a SECURITY.md to tell users how to responsibly report vulnerabilities.",
+    },
+    # Azure DevOps: Project Settings (AOG001-AOG005)
+    "AOG001": {
+        "name": "GuestAccessEnabled",
+        "short": "Guest access enabled in project.",
+        "help": "Restrict guest access to reduce attack surface from external accounts.",
+    },
+    "AOG002": {
+        "name": "PublicProject",
+        "short": "Project has public visibility.",
+        "help": "Make the project private unless public access is intentional.",
+    },
+    "AOG003": {
+        "name": "ThirdPartyOAuthEnabled",
+        "short": "Third-party OAuth app access enabled.",
+        "help": "Review and restrict third-party app access to prevent data exposure.",
+    },
+    "AOG004": {
+        "name": "SSHUnrestricted",
+        "short": "SSH authentication unrestricted.",
+        "help": "Consider enforcing HTTPS-only access if your org uses conditional access.",
+    },
+    "AOG005": {
+        "name": "OverlyPermissiveProjectPermissions",
+        "short": "Overly permissive project-level permissions.",
+        "help": "Restrict the Contributors group to minimum necessary permissions.",
+    },
+    # Azure DevOps: Identity & Access (AIM001-AIM005)
+    "AIM001": {
+        "name": "ExcessiveProjectAdmins",
+        "short": "Project has too many administrators.",
+        "help": "Limit Project Administrators to a small number of trusted individuals.",
+    },
+    "AIM002": {
+        "name": "InactiveUsers",
+        "short": "Users with no sign-in activity in 90+ days.",
+        "help": "Review and disable or remove stale accounts.",
+    },
+    "AIM003": {
+        "name": "GuestInPrivilegedGroup",
+        "short": "Guest user in a privileged security group.",
+        "help": "Remove guest users from privileged groups or convert to full members.",
+    },
+    "AIM004": {
+        "name": "ServiceAccountNoExpiration",
+        "short": "Service connection credentials have no expiration.",
+        "help": "Configure credential expiration and rotation for service connections.",
+    },
+    "AIM005": {
+        "name": "DirectPermissionAssignment",
+        "short": "Direct permission assignments instead of group-based access.",
+        "help": "Use security groups for permission assignments instead of individual users.",
+    },
 }
 
 
@@ -309,6 +510,10 @@ def _descriptive_rule_id(rule_id: str) -> str:
 
 def generate_sarif_report(report: dict) -> dict:
     """Convert the audit report to SARIF v2.1.0 format."""
+    platform = report.get("audit_metadata", {}).get("platform", "github")
+    tool_name = "ado-auditor" if platform == "azure" else TOOL_NAME
+    tool_info_uri = TOOL_INFO_URI
+
     results = []
     rules_seen: dict[str, dict] = {}
 
@@ -423,6 +628,35 @@ def generate_sarif_report(report: dict) -> dict:
 
         results.append(result)
 
+    # Apps & tokens findings
+    for finding in report.get("apps_and_tokens", {}).get("findings", []):
+        rule_id = finding.get("rule_id", "UNKNOWN")
+        _ensure_rule(rules_seen, rule_id, finding)
+
+        result = {
+            "ruleId": _descriptive_rule_id(rule_id),
+            "level": SEVERITY_TO_SARIF_LEVEL.get(finding.get("severity", "info"), "note"),
+            "message": {
+                "text": finding.get("description", finding.get("title", "")),
+            },
+            "locations": [
+                {
+                    "logicalLocations": [
+                        {
+                            "name": report.get("audit_metadata", {}).get("organization", "org"),
+                            "kind": "namespace",
+                        }
+                    ],
+                }
+            ],
+            "properties": {
+                "severity": finding.get("severity", "info"),
+                "category": "apps-and-tokens",
+            },
+        }
+
+        results.append(result)
+
     # Build rule descriptors
     rules = []
     for rule_id in sorted(rules_seen.keys()):
@@ -447,7 +681,9 @@ def generate_sarif_report(report: dict) -> dict:
             },
         }
 
-        if rule_id.startswith("IAM"):
+        if rule_id.startswith("APP") or rule_id.startswith("PAT"):
+            rule_desc["properties"]["tags"].append("apps-and-tokens")
+        elif rule_id.startswith("IAM"):
             rule_desc["properties"]["tags"].append("identity")
         elif rule_id.startswith("BPR"):
             rule_desc["properties"]["tags"].append("branch-protection")
@@ -455,6 +691,16 @@ def generate_sarif_report(report: dict) -> dict:
             rule_desc["properties"]["tags"].append("repo-security")
         elif rule_id.startswith("ORG"):
             rule_desc["properties"]["tags"].append("org-settings")
+        elif rule_id.startswith("AZP"):
+            rule_desc["properties"]["tags"].append("azure-pipelines")
+        elif rule_id.startswith("ABP"):
+            rule_desc["properties"]["tags"].append("branch-policies")
+        elif rule_id.startswith("ASC"):
+            rule_desc["properties"]["tags"].append("repo-security")
+        elif rule_id.startswith("AOG"):
+            rule_desc["properties"]["tags"].append("project-settings")
+        elif rule_id.startswith("AIM"):
+            rule_desc["properties"]["tags"].append("identity")
         else:
             rule_desc["properties"]["tags"].append("github-actions")
 
@@ -467,9 +713,9 @@ def generate_sarif_report(report: dict) -> dict:
             {
                 "tool": {
                     "driver": {
-                        "name": TOOL_NAME,
+                        "name": tool_name,
                         "version": TOOL_VERSION,
-                        "informationUri": TOOL_INFO_URI,
+                        "informationUri": tool_info_uri,
                         "rules": rules,
                     },
                 },
@@ -482,6 +728,7 @@ def generate_sarif_report(report: dict) -> dict:
                             "timestamp": report.get("audit_metadata", {}).get("timestamp", ""),
                             "totalReposScanned": report.get("audit_metadata", {}).get("total_repos_scanned", 0),
                             "totalWorkflowsScanned": report.get("audit_metadata", {}).get("total_workflows_scanned", 0),
+                            "riskScore": report.get("audit_metadata", {}).get("org_score", {}),
                         },
                         "workingDirectory": {
                             "uri": report.get("audit_metadata", {}).get("organization", ""),
