@@ -15,12 +15,16 @@ jobs:
         include:
           - os: ubuntu-latest
             target: linux-amd64
+            exe_suffix: ""
           - os: macos-latest
             target: darwin-amd64
+            exe_suffix: ""
           - os: macos-14
             target: darwin-arm64
+            exe_suffix: ""
           - os: windows-latest
             target: windows-amd64
+            exe_suffix: ".exe"
 
     runs-on: ${{ matrix.os }}
 
@@ -39,13 +43,17 @@ jobs:
 
       - name: Build binary
         run: |
-          pyinstaller --onefile --name gh-auditor-${{ matrix.target }} --collect-all gh_auditor gh_auditor/__main__.py
+          pyinstaller --onefile \
+            --name gh-auditor-${{ matrix.target }} \
+            --collect-all gh_auditor \
+            gh_auditor/__main__.py
+        shell: bash
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: gh-auditor-${{ matrix.target }}
-          path: dist/gh-auditor-${{ matrix.target }}${{ matrix.os == 'windows-latest' && '.exe' || '' }}
+          path: dist/gh-auditor-${{ matrix.target }}${{ matrix.exe_suffix }}
 
   release:
     needs: build
@@ -62,18 +70,42 @@ jobs:
       - name: Prepare release assets
         run: |
           mkdir -p release
+
+          # Collect binaries from artifact directories
           for dir in artifacts/*/; do
             cp "$dir"* release/
           done
+
+          # Include install script
+          cp install.sh release/
+
+          # Generate checksums
           cd release
-          for f in *; do
-            sha256sum "$f" >> checksums-sha256.txt
-          done
+          sha256sum * > checksums-sha256.txt
+          echo "=== Release assets ==="
+          ls -lh
+          echo ""
           cat checksums-sha256.txt
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
+          body: |
+            ## Install
+
+            **One-line install (Linux / macOS):**
+            ```bash
+            curl -fsSL https://raw.githubusercontent.com/nyrahul/gh-audit/main/install.sh | sh
+            ```
+
+            **Or download a binary directly** from the assets below.
+
+            **Or install from PyPI / source:**
+            ```bash
+            pip install gh-auditor
+            ```
+
+            See [README](https://github.com/nyrahul/gh-audit#readme) for setup instructions.
           files: |
             release/*

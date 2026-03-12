@@ -27,6 +27,22 @@ Reports are generated in JSON, HTML, and SARIF formats.
 
 ## Installation
 
+### One-line install (Linux / macOS)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nyrahul/gh-audit/main/install.sh | sh
+```
+
+This downloads the latest pre-built binary for your platform and installs it to `/usr/local/bin` (or `~/.local/bin` if not writable). You can control the install directory and version:
+
+```bash
+VERSION=0.1.0 INSTALL_DIR=~/bin curl -fsSL https://raw.githubusercontent.com/nyrahul/gh-audit/main/install.sh | sh
+```
+
+### Pre-built binaries
+
+Download the latest binary for your platform from the [Releases](https://github.com/nyrahul/gh-audit/releases) page.
+
 ### From source
 
 ```bash
@@ -40,10 +56,6 @@ pip install .
 ```bash
 pip install -e ".[dev]"
 ```
-
-### Pre-built binaries
-
-Download the latest binary for your platform from the [Releases](https://github.com/nyrahul/gh-audit/releases) page.
 
 ## Setup
 
