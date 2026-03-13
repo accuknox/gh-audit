@@ -2,7 +2,7 @@
 
 import responses
 
-from gh_auditor.azure.ado_client import AzureDevOpsClient
+from pipeaudit.azure.ado_client import AzureDevOpsClient
 
 
 @responses.activate

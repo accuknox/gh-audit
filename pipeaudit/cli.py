@@ -1,4 +1,4 @@
-"""CLI entry point for gh-auditor."""
+"""CLI entry point for pipeaudit."""
 
 from __future__ import annotations
 
@@ -15,11 +15,21 @@ from .html_report import write_html_report
 from .sarif_report import write_sarif_report
 from .token_validator import TokenPermissionError, validate_token
 from .tui import AuditTUI
+from .version import __version__, __build_date__
+
+
+def _version_string() -> str:
+    s = f"pipeaudit {__version__}"
+    if __build_date__ != "source":
+        s += f" (built {__build_date__})"
+    else:
+        s += " (source)"
+    return s
 
 
 def main():
     parser = argparse.ArgumentParser(
-        prog="gh-auditor",
+        prog="pipeaudit",
         description=(
             "Audit GitHub Actions workflows across an organization for security "
             "best practices. Generates a JSON report with findings.\n\n"
@@ -53,6 +63,11 @@ def main():
             f"       export {CONFIG_TOKEN_ENV}=github_pat_...\n"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--version", "-V",
+        action="version",
+        version=_version_string(),
     )
     parser.add_argument(
         "--platform",

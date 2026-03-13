@@ -2,7 +2,7 @@
 
 from unittest.mock import MagicMock, patch
 
-from gh_auditor.azure.ado_auditor import AdoAuditConfig, run_ado_audit
+from pipeaudit.azure.ado_auditor import AdoAuditConfig, run_ado_audit
 
 
 def _mock_client():
@@ -35,7 +35,7 @@ def _mock_client():
     return client
 
 
-@patch("gh_auditor.azure.ado_auditor.AzureDevOpsClient")
+@patch("pipeaudit.azure.ado_auditor.AzureDevOpsClient")
 def test_full_audit_produces_report(mock_client_class):
     mock_client_class.return_value = _mock_client()
 
@@ -54,7 +54,7 @@ def test_full_audit_produces_report(mock_client_class):
     assert report["repos"][0]["repo"] == "TestProject/repo1"
 
 
-@patch("gh_auditor.azure.ado_auditor.AzureDevOpsClient")
+@patch("pipeaudit.azure.ado_auditor.AzureDevOpsClient")
 def test_audit_with_project_filter(mock_client_class):
     client = _mock_client()
     client.get_project.return_value = {
@@ -72,7 +72,7 @@ def test_audit_with_project_filter(mock_client_class):
     assert report["audit_metadata"]["total_repos_scanned"] == 0
 
 
-@patch("gh_auditor.azure.ado_auditor.AzureDevOpsClient")
+@patch("pipeaudit.azure.ado_auditor.AzureDevOpsClient")
 def test_audit_findings_tallied(mock_client_class):
     client = _mock_client()
     # Return a pipeline YAML with a known issue
@@ -97,7 +97,7 @@ steps:
     assert "AZP001" in rule_ids
 
 
-@patch("gh_auditor.azure.ado_auditor.AzureDevOpsClient")
+@patch("pipeaudit.azure.ado_auditor.AzureDevOpsClient")
 def test_audit_skip_identity(mock_client_class):
     mock_client_class.return_value = _mock_client()
 
@@ -110,7 +110,7 @@ def test_audit_skip_identity(mock_client_class):
     assert "identity" not in report
 
 
-@patch("gh_auditor.azure.ado_auditor.AzureDevOpsClient")
+@patch("pipeaudit.azure.ado_auditor.AzureDevOpsClient")
 def test_audit_skip_project_settings(mock_client_class):
     mock_client_class.return_value = _mock_client()
 
@@ -123,7 +123,7 @@ def test_audit_skip_project_settings(mock_client_class):
     assert "org_settings" not in report
 
 
-@patch("gh_auditor.azure.ado_auditor.AzureDevOpsClient")
+@patch("pipeaudit.azure.ado_auditor.AzureDevOpsClient")
 def test_scoring_applied(mock_client_class):
     mock_client_class.return_value = _mock_client()
 

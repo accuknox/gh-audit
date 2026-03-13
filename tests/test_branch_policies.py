@@ -1,6 +1,6 @@
 """Tests for Azure DevOps branch policy rules (ABP001-ABP007)."""
 
-from gh_auditor.azure.branch_policies import (
+from pipeaudit.azure.branch_policies import (
     audit_branch_policies,
     POLICY_MINIMUM_REVIEWERS,
     POLICY_REQUIRED_REVIEWERS,

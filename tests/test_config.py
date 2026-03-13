@@ -6,7 +6,7 @@ import tempfile
 import pytest
 import yaml
 
-from gh_auditor.config import load_config, CONFIG_TOKEN_ENV
+from pipeaudit.config import load_config, CONFIG_TOKEN_ENV
 
 
 def _write_config(tmp_path, data):

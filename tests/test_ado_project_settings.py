@@ -2,7 +2,7 @@
 
 from unittest.mock import MagicMock
 
-from gh_auditor.azure.project_settings import audit_project_settings
+from pipeaudit.azure.project_settings import audit_project_settings
 
 
 def _make_client(properties=None, teams=None):

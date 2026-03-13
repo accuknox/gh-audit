@@ -2,9 +2,9 @@
 
 import responses
 
-from gh_auditor.github_client import GitHubClient
-from gh_auditor.org_settings import audit_org_settings
-from gh_auditor.token_validator import GITHUB_API
+from pipeaudit.github_client import GitHubClient
+from pipeaudit.org_settings import audit_org_settings
+from pipeaudit.token_validator import GITHUB_API
 
 
 class TestOrgSettings:

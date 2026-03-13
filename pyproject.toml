@@ -3,10 +3,12 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "gh-auditor"
-version = "0.1.0"
-description = "Audit GitHub Actions workflows across an organization for security best practices"
+name = "pipeaudit"
+dynamic = ["version"]
+description = "Audit CI/CD pipelines, branch protection, and security settings across GitHub and Azure DevOps"
 requires-python = ">=3.10"
+license = {text = "MIT"}
+readme = "README.md"
 dependencies = [
     "requests>=2.31.0",
     "pyyaml>=6.0",
@@ -20,8 +22,15 @@ dev = [
 ]
 
 [project.scripts]
-gh-auditor = "gh_auditor.cli:main"
+pipeaudit = "pipeaudit.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/accuknox/gh-audit"
+Issues = "https://github.com/accuknox/gh-audit/issues"
 
 [tool.setuptools.packages.find]
-include = ["gh_auditor*"]
+include = ["pipeaudit*"]
 exclude = ["tests*", "res*"]
+
+[tool.setuptools.dynamic]
+version = {attr = "pipeaudit.version.__version__"}

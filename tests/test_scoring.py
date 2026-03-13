@@ -1,6 +1,6 @@
 """Tests for the scoring module."""
 
-from gh_auditor.scoring import (
+from pipeaudit.scoring import (
     grade_for_score,
     score_repo,
     score_org,

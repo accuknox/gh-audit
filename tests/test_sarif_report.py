@@ -1,6 +1,6 @@
 """Tests for SARIF v2.1.0 report generation."""
 
-from gh_auditor.sarif_report import (
+from pipeaudit.sarif_report import (
     generate_sarif_report,
     SARIF_VERSION,
     SARIF_SCHEMA,

@@ -2,7 +2,7 @@
 
 import os
 
-from gh_auditor.html_report import generate_html_report, write_html_report
+from pipeaudit.html_report import generate_html_report, write_html_report
 
 
 SAMPLE_REPORT = {

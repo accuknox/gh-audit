@@ -93,7 +93,7 @@ def _reject_classic_pat(scopes_header: str):
             f"Classic PAT detected with write/admin scopes: "
             f"{', '.join(sorted(dangerous))}. "
             f"Classic PATs are not supported. Please create a fine-grained PAT "
-            f"with read-only permissions. See 'gh-auditor --help' for setup instructions."
+            f"with read-only permissions. See 'pipeaudit --help' for setup instructions."
         )
 
     # Even read-only classic PATs can't access private repos without 'repo' scope
@@ -101,7 +101,7 @@ def _reject_classic_pat(scopes_header: str):
         "Classic PAT detected. Classic PATs cannot access private repositories "
         "without the 'repo' scope, which grants write access. "
         "Please create a fine-grained PAT with read-only permissions instead. "
-        "See 'gh-auditor --help' for setup instructions."
+        "See 'pipeaudit --help' for setup instructions."
     )
 
 
@@ -213,7 +213,7 @@ def _check_required_read_permissions(token: str, org: str):
         raise TokenPermissionError(
             f"Token is missing required permissions. In your fine-grained PAT settings, "
             f"enable these:\n\n    {perms_list}\n\n"
-            f"See 'gh-auditor --help' for full setup instructions."
+            f"See 'pipeaudit --help' for full setup instructions."
         )
 
 

@@ -4,8 +4,8 @@ from datetime import datetime, timedelta, timezone
 
 import responses
 
-from gh_auditor.apps_and_tokens import audit_apps_and_tokens, INACTIVITY_DAYS
-from gh_auditor.github_client import GitHubClient, GITHUB_API
+from pipeaudit.apps_and_tokens import audit_apps_and_tokens, INACTIVITY_DAYS
+from pipeaudit.github_client import GitHubClient, GITHUB_API
 
 
 def _make_client():
@@ -294,7 +294,7 @@ class TestScoringIntegration:
     """Test that apps_tokens_penalty integrates into org scoring."""
 
     def test_apps_tokens_penalty_deducted(self):
-        from gh_auditor.scoring import score_org
+        from pipeaudit.scoring import score_org
 
         report = {
             "repos": [{"repo": "org/r1", "findings": []}],
@@ -312,7 +312,7 @@ class TestScoringIntegration:
 
     def test_apps_tokens_penalty_capped(self):
         """Many findings should be capped at ORG_CATEGORY_PENALTY_CAP."""
-        from gh_auditor.scoring import score_org, ORG_CATEGORY_PENALTY_CAP
+        from pipeaudit.scoring import score_org, ORG_CATEGORY_PENALTY_CAP
 
         report = {
             "repos": [{"repo": "org/r1", "findings": []}],

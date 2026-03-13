@@ -6,7 +6,7 @@ import tempfile
 import pytest
 import yaml
 
-from gh_auditor.config import load_config
+from pipeaudit.config import load_config
 
 
 def _write_config(data: dict) -> str:
@@ -27,7 +27,7 @@ class TestAdoConfigLoading:
         })
         try:
             config, output, verbosity, html, sarif, log = load_config(path)
-            from gh_auditor.azure.ado_auditor import AdoAuditConfig
+            from pipeaudit.azure.ado_auditor import AdoAuditConfig
             assert isinstance(config, AdoAuditConfig)
             assert config.org == "my-ado-org"
             assert config.projects == ["ProjectA", "ProjectB"]
@@ -92,7 +92,7 @@ class TestAdoConfigLoading:
         })
         try:
             config, *_ = load_config(path)
-            from gh_auditor.auditor import AuditConfig
+            from pipeaudit.auditor import AuditConfig
             assert isinstance(config, AuditConfig)
             assert config.org == "my-gh-org"
         finally:

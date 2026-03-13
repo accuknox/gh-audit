@@ -30,23 +30,23 @@ Reports are generated in JSON, HTML, and SARIF formats.
 ### One-line install (Linux / macOS)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/nyrahul/gh-audit/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/accuknox/gh-audit/main/install.sh | sh
 ```
 
 This downloads the latest pre-built binary for your platform and installs it to `/usr/local/bin` (or `~/.local/bin` if not writable). You can control the install directory and version:
 
 ```bash
-VERSION=0.1.0 INSTALL_DIR=~/bin curl -fsSL https://raw.githubusercontent.com/nyrahul/gh-audit/main/install.sh | sh
+VERSION=0.1.0 INSTALL_DIR=~/bin curl -fsSL https://raw.githubusercontent.com/accuknox/gh-audit/main/install.sh | sh
 ```
 
 ### Pre-built binaries
 
-Download the latest binary for your platform from the [Releases](https://github.com/nyrahul/gh-audit/releases) page.
+Download the latest binary for your platform from the [Releases](https://github.com/accuknox/gh-audit/releases) page.
 
 ### From source
 
 ```bash
-git clone https://github.com/nyrahul/gh-audit.git
+git clone https://github.com/accuknox/gh-audit.git
 cd gh-audit
 pip install .
 ```
@@ -107,37 +107,37 @@ export ADO_AUDIT_TOKEN=...
 #### With a config file
 
 ```bash
-gh-auditor --config audit-config.yaml
+pipeaudit --config audit-config.yaml
 ```
 
 #### With CLI arguments
 
 ```bash
-gh-auditor --org my-org --output report.json --html report.html --sarif report.sarif
+pipeaudit --org my-org --output report.json --html report.html --sarif report.sarif
 ```
 
 #### Audit specific repos
 
 ```bash
-gh-auditor --org my-org --repos my-org/frontend my-org/backend:develop
+pipeaudit --org my-org --repos my-org/frontend my-org/backend:develop
 ```
 
 #### Skip optional audits
 
 ```bash
-gh-auditor --config audit-config.yaml --skip-identity
+pipeaudit --config audit-config.yaml --skip-identity
 ```
 
 ### Azure DevOps
 
 ```bash
-gh-auditor --platform azure --org my-ado-org --output report.json --html report.html
+pipeaudit --platform azure --org my-ado-org --output report.json --html report.html
 ```
 
 #### Audit specific Azure DevOps projects
 
 ```bash
-gh-auditor --platform azure --org my-ado-org --projects MyProject BackendProject
+pipeaudit --platform azure --org my-ado-org --projects MyProject BackendProject
 ```
 
 ## Configuration

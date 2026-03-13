@@ -3,7 +3,7 @@
 import pytest
 import responses
 
-from gh_auditor.token_validator import (
+from pipeaudit.token_validator import (
     TokenPermissionError,
     validate_token,
     _reject_classic_pat,

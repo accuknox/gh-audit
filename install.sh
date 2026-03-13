@@ -1,6 +1,6 @@
 #!/bin/sh
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/nyrahul/gh-audit/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/accuknox/gh-audit/main/install.sh | sh
 #
 # Environment variables:
 #   INSTALL_DIR  — directory to install into (default: /usr/local/bin, or ~/.local/bin if not writable)
@@ -8,8 +8,8 @@
 
 set -e
 
-REPO="nyrahul/gh-audit"
-BINARY_NAME="gh-auditor"
+REPO="accuknox/gh-audit"
+BINARY_NAME="pipeaudit"
 
 # Detect OS and architecture
 detect_platform() {
@@ -31,11 +31,11 @@ detect_platform() {
 
     # No linux-arm64 or windows-arm64 builds yet
     if [ "$OS" = "linux" ] && [ "$ARCH" = "arm64" ]; then
-        echo "ERROR: No pre-built binary for linux-arm64. Install from source: pip install gh-auditor" >&2
+        echo "ERROR: No pre-built binary for linux-arm64. Install from source: pip install pipeaudit" >&2
         exit 1
     fi
     if [ "$OS" = "windows" ] && [ "$ARCH" = "arm64" ]; then
-        echo "ERROR: No pre-built binary for windows-arm64. Install from source: pip install gh-auditor" >&2
+        echo "ERROR: No pre-built binary for windows-arm64. Install from source: pip install pipeaudit" >&2
         exit 1
     fi
 

@@ -2,7 +2,7 @@
 
 from unittest.mock import MagicMock
 
-from gh_auditor.azure.repo_security import audit_repo_security
+from pipeaudit.azure.repo_security import audit_repo_security
 
 
 def _make_client(file_exists=False):

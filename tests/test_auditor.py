@@ -7,9 +7,9 @@ import pytest
 import responses
 import yaml
 
-from gh_auditor.auditor import AuditConfig, RepoSpec, run_audit, _audit_branch_protection, _audit_repo_security
-from gh_auditor.github_client import GitHubClient
-from gh_auditor.token_validator import GITHUB_API
+from pipeaudit.auditor import AuditConfig, RepoSpec, run_audit, _audit_branch_protection, _audit_repo_security
+from pipeaudit.github_client import GitHubClient
+from pipeaudit.token_validator import GITHUB_API
 
 
 def _b64(text: str) -> str:

@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write   # needed for PyPI trusted publishing
 
 jobs:
   build:
@@ -35,6 +36,15 @@ jobs:
         with:
           python-version: "3.13"
 
+      - name: Stamp version and build date
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          DATE="$(date -u +%Y-%m-%d)"
+          sed -i.bak "s/^__version__ = .*/__version__ = \"${TAG}\"/" pipeaudit/version.py
+          sed -i.bak "s/^__build_date__ = .*/__build_date__ = \"${DATE}\"/" pipeaudit/version.py
+          cat pipeaudit/version.py
+        shell: bash
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -44,16 +54,48 @@ jobs:
       - name: Build binary
         run: |
           pyinstaller --onefile \
-            --name gh-auditor-${{ matrix.target }} \
-            --collect-all gh_auditor \
-            gh_auditor/__main__.py
+            --name pipeaudit-${{ matrix.target }} \
+            --collect-all pipeaudit \
+            pipeaudit/__main__.py
         shell: bash
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: gh-auditor-${{ matrix.target }}
-          path: dist/gh-auditor-${{ matrix.target }}${{ matrix.exe_suffix }}
+          name: pipeaudit-${{ matrix.target }}
+          path: dist/pipeaudit-${{ matrix.target }}${{ matrix.exe_suffix }}
+
+  pypi-publish:
+    runs-on: ubuntu-latest
+
+    # Restrict to tagged releases only
+    environment:
+      name: pypi
+      url: https://pypi.org/p/pipeaudit
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Stamp version and build date
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          DATE="$(date -u +%Y-%m-%d)"
+          sed -i "s/^__version__ = .*/__version__ = \"${TAG}\"/" pipeaudit/version.py
+          sed -i "s/^__build_date__ = .*/__build_date__ = \"${DATE}\"/" pipeaudit/version.py
+          cat pipeaudit/version.py
+
+      - name: Build sdist and wheel
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build
+          ls -lh dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
 
   release:
     needs: build
@@ -96,16 +138,16 @@ jobs:
 
             **One-line install (Linux / macOS):**
             ```bash
-            curl -fsSL https://raw.githubusercontent.com/nyrahul/gh-audit/main/install.sh | sh
+            curl -fsSL https://raw.githubusercontent.com/accuknox/gh-audit/main/install.sh | sh
             ```
 
             **Or download a binary directly** from the assets below.
 
-            **Or install from PyPI / source:**
+            **Or install via pip:**
             ```bash
-            pip install gh-auditor
+            pip install pipeaudit
             ```
 
-            See [README](https://github.com/nyrahul/gh-audit#readme) for setup instructions.
+            See [README](https://github.com/accuknox/gh-audit#readme) for setup instructions.
           files: |
             release/*

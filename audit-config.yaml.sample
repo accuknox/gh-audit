@@ -1,4 +1,4 @@
-# gh-auditor configuration
+# pipeaudit configuration
 #
 # Copy this file to audit-config.yaml and fill in your values.
 # Token is read from the GH_AUDIT_TOKEN environment variable (not stored here).

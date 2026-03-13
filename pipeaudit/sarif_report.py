@@ -10,9 +10,11 @@ import json
 
 SARIF_SCHEMA = "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json"
 SARIF_VERSION = "2.1.0"
-TOOL_NAME = "gh-auditor"
-TOOL_VERSION = "0.1.0"
-TOOL_INFO_URI = "https://github.com/gh-auditor"
+from .version import __version__
+
+TOOL_NAME = "pipeaudit"
+TOOL_VERSION = __version__
+TOOL_INFO_URI = "https://github.com/accuknox/gh-audit"
 
 # Map our severity levels to SARIF levels
 SEVERITY_TO_SARIF_LEVEL = {
@@ -511,7 +513,7 @@ def _descriptive_rule_id(rule_id: str) -> str:
 def generate_sarif_report(report: dict) -> dict:
     """Convert the audit report to SARIF v2.1.0 format."""
     platform = report.get("audit_metadata", {}).get("platform", "github")
-    tool_name = "ado-auditor" if platform == "azure" else TOOL_NAME
+    tool_name = TOOL_NAME
     tool_info_uri = TOOL_INFO_URI
 
     results = []

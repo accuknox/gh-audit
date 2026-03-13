@@ -5,8 +5,8 @@ from datetime import datetime, timedelta, timezone
 import pytest
 import responses
 
-from gh_auditor.github_client import GitHubClient, GITHUB_API
-from gh_auditor.identity import audit_identity, _highest_permission
+from pipeaudit.github_client import GitHubClient, GITHUB_API
+from pipeaudit.identity import audit_identity, _highest_permission
 
 
 class TestHighestPermission:

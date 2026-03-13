@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
-from gh_auditor.azure.identity import audit_identity
+from pipeaudit.azure.identity import audit_identity
 
 
 def _make_client(users=None, groups=None, members_by_descriptor=None, connections=None):

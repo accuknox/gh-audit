@@ -2,7 +2,7 @@
 
 from unittest.mock import MagicMock
 
-from gh_auditor.azure.pipeline_rules import audit_pipeline_security
+from pipeaudit.azure.pipeline_rules import audit_pipeline_security
 
 
 def _make_client(yaml_content=None):

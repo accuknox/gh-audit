@@ -115,7 +115,7 @@ class AuditTUI(ProgressCallback):
 
         return Panel(
             Group(*parts),
-            title="[bold]gh-auditor[/bold]",
+            title="[bold]pipeaudit[/bold]",
             border_style="blue",
             padding=(1, 2),
         )

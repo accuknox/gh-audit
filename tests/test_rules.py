@@ -2,7 +2,7 @@
 
 import pytest
 
-from gh_auditor.rules import (
+from pipeaudit.rules import (
     check_pull_request_target,
     check_script_injection,
     check_unpinned_actions,
