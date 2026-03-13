@@ -18,11 +18,11 @@ TOOL_INFO_URI = "https://github.com/accuknox/gh-audit"
 
 # Map our severity levels to SARIF levels
 SEVERITY_TO_SARIF_LEVEL = {
-    "critical": "error",
+    "critical": "critical-error",
     "high": "error",
     "medium": "warning",
     "low": "note",
-    "info": "note",
+    "info": "none",
 }
 
 # Map our severity to SARIF security-severity score (CVSS-like 0-10)
