@@ -31,15 +31,17 @@ def main():
     parser = argparse.ArgumentParser(
         prog="pipeaudit",
         description=(
-            "Audit GitHub Actions workflows across an organization for security "
-            "best practices. Generates a JSON report with findings.\n\n"
+            "Audit CI/CD pipelines, branch protection, repository security, and\n"
+            "organization settings across GitHub or Azure DevOps.\n"
+            "Generates reports in JSON, HTML, and SARIF formats.\n\n"
             "Configuration can be provided via a YAML config file (--config) "
             "or via command-line arguments. CLI arguments override config file values.\n\n"
-            f"The GitHub token is read from the {CONFIG_TOKEN_ENV} environment "
-            f"variable, or passed via --token."
+            "Tokens are read from environment variables or passed via --token:\n"
+            f"  GitHub:      {CONFIG_TOKEN_ENV}\n"
+            "  Azure DevOps: ADO_AUDIT_TOKEN"
         ),
         epilog=(
-            "FINE-GRAINED PAT SETUP:\n"
+            "GITHUB — FINE-GRAINED PAT SETUP:\n"
             "  This tool requires a fine-grained Personal Access Token (PAT) with\n"
             "  read-only permissions. Classic PATs are NOT supported because they\n"
             "  cannot grant read access to private repos without also granting write.\n\n"
@@ -60,7 +62,33 @@ def main():
             "     Do NOT grant any 'Read and write' or 'Admin' permissions.\n"
             "     The tool will reject tokens with write access at startup.\n\n"
             "  7. Click 'Generate token' and export it:\n"
-            f"       export {CONFIG_TOKEN_ENV}=github_pat_...\n"
+            f"       export {CONFIG_TOKEN_ENV}=github_pat_...\n\n"
+            "AZURE DEVOPS — PAT SETUP:\n"
+            "  Create a Personal Access Token (PAT) scoped to your organization.\n\n"
+            "  1. Go to: https://dev.azure.com/{your-org}/_usersSettings/tokens\n\n"
+            "  2. Click 'New Token' and set these scopes:\n"
+            "       Code .............. Read       (needed to read repo and pipeline YAML)\n"
+            "       Build ............. Read       (needed to inspect pipeline definitions)\n"
+            "       Graph ............. Read       (needed for identity/group membership)\n"
+            "       Project and Team .. Read       (needed to list projects and settings)\n"
+            "       Security .......... Manage     (needed for identity/access audits;\n"
+            "                                       optional, audit degrades gracefully)\n\n"
+            "  3. Set an appropriate expiration (30-90 days recommended).\n\n"
+            "  4. Click 'Create' and export the token:\n"
+            "       export ADO_AUDIT_TOKEN=...\n\n"
+            "  5. Run the audit:\n"
+            "       pipeaudit --platform azure --org my-ado-org --output report.json\n\n"
+            "GITLAB — PERSONAL ACCESS TOKEN SETUP:\n"
+            "  Create a Personal Access Token (PAT) with read_api scope.\n\n"
+            "  1. Go to: https://gitlab.com/-/user_settings/personal_access_tokens\n\n"
+            "  2. Create a token with these scopes:\n"
+            "       read_api ......... Read       (needed to read groups, projects,\n"
+            "                                      pipelines, and settings)\n\n"
+            "  3. Set an appropriate expiration (30-90 days recommended).\n\n"
+            "  4. Click 'Create personal access token' and export it:\n"
+            "       export GL_AUDIT_TOKEN=glpat-...\n\n"
+            "  5. Run the audit:\n"
+            "       pipeaudit --platform gitlab --org my-group --output report.json\n"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -71,9 +99,9 @@ def main():
     )
     parser.add_argument(
         "--platform",
-        choices=["github", "azure"],
+        choices=["github", "azure", "gitlab"],
         default="github",
-        help="Platform to audit: 'github' (default) or 'azure' (Azure DevOps).",
+        help="Platform to audit: 'github' (default), 'azure' (Azure DevOps), or 'gitlab'.",
     )
     parser.add_argument(
         "--config", "-c",
@@ -108,6 +136,12 @@ def main():
         nargs="*",
         metavar="PROJECT",
         help="(Azure DevOps) Specific projects to audit.",
+    )
+    parser.add_argument(
+        "--groups",
+        nargs="*",
+        metavar="GROUP",
+        help="(GitLab) Specific sub-groups to audit.",
     )
     parser.add_argument(
         "--output", "-o",
@@ -216,11 +250,19 @@ def main():
     if not token:
         if platform == "azure":
             token = os.environ.get("ADO_AUDIT_TOKEN", "").strip()
+        elif platform == "gitlab":
+            token = os.environ.get("GL_AUDIT_TOKEN", "").strip()
+            if not token:
+                token = os.environ.get("GITLAB_TOKEN", "").strip()
         if not token:
             token = os.environ.get(CONFIG_TOKEN_ENV, "").strip()
 
     if not token:
-        env_var = "ADO_AUDIT_TOKEN" if platform == "azure" else CONFIG_TOKEN_ENV
+        env_var_map = {
+            "azure": "ADO_AUDIT_TOKEN",
+            "gitlab": "GL_AUDIT_TOKEN",
+        }
+        env_var = env_var_map.get(platform, CONFIG_TOKEN_ENV)
         print(
             f"ERROR: No token provided. Use --token or set {env_var} "
             f"environment variable.",
@@ -268,7 +310,62 @@ def main():
     console = Console(stderr=True)
 
     # Platform-specific validation and audit
-    if platform == "azure":
+    if platform == "gitlab":
+        # GitLab flow
+        from .gitlab.gitlab_token_validator import GitLabTokenError, validate_gitlab_token
+        from .gitlab.gitlab_auditor import GitLabAuditConfig, run_gitlab_audit
+
+        base_url = getattr(config, "base_url", "https://gitlab.com/api/v4") if config else "https://gitlab.com/api/v4"
+
+        if use_tui:
+            console.print("[bold blue]Validating GitLab token...[/bold blue]")
+        try:
+            gl_info = validate_gitlab_token(org, token, base_url)
+            if use_tui:
+                console.print(
+                    f"[green]Authenticated to GitLab group:[/green] {gl_info.get('group', org)}"
+                )
+            logging.info("Authenticated to GitLab group: %s", org)
+        except GitLabTokenError as e:
+            console.print(f"[bold red]ERROR:[/bold red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            console.print(f"[bold red]ERROR:[/bold red] Token validation failed: {e}")
+            sys.exit(1)
+
+        gl_config = GitLabAuditConfig(
+            org=org,
+            token=token,
+            base_url=base_url,
+            groups=args.groups or (getattr(config, "groups", []) if config else []),
+            repos=args.repos or [],
+            include_archived=include_archived,
+            skip_identity=skip_identity,
+            skip_group_settings=getattr(config, "skip_group_settings", False) if config else False,
+            skip_pipeline_security=getattr(config, "skip_pipeline_security", False) if config else False,
+            updated_within_months=updated_within,
+        )
+
+        tui = AuditTUI(console=console) if use_tui else None
+        try:
+            if tui:
+                tui.start()
+            report = run_gitlab_audit(gl_config, progress=tui)
+            if tui:
+                tui.update_severity_counts(report)
+                tui.stop()
+                tui.print_summary(report)
+        except KeyboardInterrupt:
+            if tui:
+                tui.stop()
+            console.print("\n[yellow]Audit interrupted.[/yellow]")
+            sys.exit(130)
+        except Exception as e:
+            if tui:
+                tui.stop()
+            console.print(f"[bold red]ERROR:[/bold red] Audit failed: {e}")
+            sys.exit(1)
+    elif platform == "azure":
         # Azure DevOps flow
         from .azure.ado_token_validator import AdoTokenError, validate_ado_token
         from .azure.ado_auditor import AdoAuditConfig, run_ado_audit

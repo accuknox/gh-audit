@@ -495,6 +495,156 @@ _RULE_HELP = {
         "short": "Direct permission assignments instead of group-based access.",
         "help": "Use security groups for permission assignments instead of individual users.",
     },
+    # GitLab: Pipeline Security (GLP001-GLP008)
+    "GLP001": {
+        "name": "UnpinnedInclude",
+        "short": "CI include not pinned to a SHA or version tag.",
+        "help": "Pin remote and project includes to a full commit SHA or version tag to prevent supply chain attacks.",
+    },
+    "GLP002": {
+        "name": "ScriptInjection",
+        "short": "Attacker-controlled CI variable interpolated into script block.",
+        "help": "Use CI/CD variables with proper escaping instead of interpolating untrusted variables into scripts.",
+    },
+    "GLP003": {
+        "name": "SharedRunnerPrivateProject",
+        "short": "Shared runner used on private/internal project.",
+        "help": "Use group or project-specific runners for sensitive projects to prevent cross-project code execution.",
+    },
+    "GLP004": {
+        "name": "ForkMrPipelineNoSourceCheck",
+        "short": "Pipeline allows MR from forks without source project check.",
+        "help": "Check CI_MERGE_REQUEST_SOURCE_PROJECT_ID in pipeline rules to restrict fork MR execution.",
+    },
+    "GLP005": {
+        "name": "UnprotectedSecretVariable",
+        "short": "Secret-like CI/CD variable not protected or masked.",
+        "help": "Mark secret-like variables as protected and masked to limit exposure.",
+    },
+    "GLP006": {
+        "name": "SecurityJobAllowFailure",
+        "short": "Security scanning job allows failure.",
+        "help": "Remove allow_failure: true from security scanning jobs to ensure vulnerabilities block the pipeline.",
+    },
+    "GLP007": {
+        "name": "UnrestrictedJob",
+        "short": "Job with no rules/only/except restriction runs on every trigger.",
+        "help": "Add rules: or only: to control when jobs execute.",
+    },
+    "GLP008": {
+        "name": "UnprotectedWildcardVariable",
+        "short": "Secret variable with protected: false and environment_scope: *.",
+        "help": "Set protected: true or restrict environment_scope to limit variable exposure.",
+    },
+    # GitLab: Branch/MR Policies (GLB001-GLB007)
+    "GLB001": {
+        "name": "DefaultBranchNotProtected",
+        "short": "Default branch is not protected.",
+        "help": "Configure branch protection on the default branch to prevent direct pushes and force pushes.",
+    },
+    "GLB002": {
+        "name": "NoRequiredApprovals",
+        "short": "No MR approvals required before merging.",
+        "help": "Set approvals_before_merge to at least 1 to ensure code review.",
+    },
+    "GLB003": {
+        "name": "CodeOwnerApprovalNotRequired",
+        "short": "Code owner approval not required on protected branch.",
+        "help": "Enable code_owner_approval_required to ensure designated owners review changes.",
+    },
+    "GLB004": {
+        "name": "ForcePushAllowed",
+        "short": "Force push allowed on protected default branch.",
+        "help": "Disable allow_force_push to prevent history rewriting on the default branch.",
+    },
+    "GLB005": {
+        "name": "BranchDeletionPossible",
+        "short": "Default branch not protected from deletion.",
+        "help": "Protect the default branch to prevent accidental or malicious deletion.",
+    },
+    "GLB006": {
+        "name": "AuthorCanApproveOwnMR",
+        "short": "MR author can approve their own merge request.",
+        "help": "Disable merge_requests_author_approval to require independent review.",
+    },
+    "GLB007": {
+        "name": "CommittersCanApprove",
+        "short": "MR committers can approve merge requests.",
+        "help": "Enable merge_requests_disable_committers_approval to require independent review.",
+    },
+    # GitLab: Repo Security (GLS001-GLS004)
+    "GLS001": {
+        "name": "NoSecretDetection",
+        "short": "No secret detection configured in CI pipeline.",
+        "help": "Include the Secret-Detection template or define a secret_detection job to catch committed secrets.",
+    },
+    "GLS002": {
+        "name": "NoDependencyScanning",
+        "short": "No dependency scanning configured in CI pipeline.",
+        "help": "Include the Dependency-Scanning template or define a dependency_scanning job.",
+    },
+    "GLS003": {
+        "name": "NoSecurityPolicy",
+        "short": "No SECURITY.md file in repository.",
+        "help": "Add a SECURITY.md to tell users how to responsibly report vulnerabilities.",
+    },
+    "GLS004": {
+        "name": "NoContainerScanning",
+        "short": "Dockerfile present but no container scanning configured.",
+        "help": "Include the Container-Scanning template to detect image vulnerabilities.",
+    },
+    # GitLab: Group Settings (GLG001-GLG005)
+    "GLG001": {
+        "name": "PublicGroupVisibility",
+        "short": "Group has public visibility.",
+        "help": "Make the group private or internal unless public access is intentional.",
+    },
+    "GLG002": {
+        "name": "TwoFactorNotRequired",
+        "short": "Group does not require two-factor authentication.",
+        "help": "Enable require_two_factor_authentication for all group members.",
+    },
+    "GLG003": {
+        "name": "UnrestrictedProjectCreation",
+        "short": "Project creation not restricted to maintainer+.",
+        "help": "Restrict project_creation_level to 'maintainer' or 'noone'.",
+    },
+    "GLG004": {
+        "name": "ForkingOutsideGroupAllowed",
+        "short": "Forking outside group not prevented.",
+        "help": "Enable prevent_forking_outside_group to keep code within organizational boundaries.",
+    },
+    "GLG005": {
+        "name": "SharedRunnersEnabled",
+        "short": "Shared runners enabled for group.",
+        "help": "Consider using group-specific runners for better isolation.",
+    },
+    # GitLab: Identity (GLI001-GLI005)
+    "GLI001": {
+        "name": "TooManyGroupOwners",
+        "short": "Group has too many owner users.",
+        "help": "Limit group-level Owner access to a small number of trusted individuals.",
+    },
+    "GLI002": {
+        "name": "InactiveMember",
+        "short": "Member with no activity in 90+ days.",
+        "help": "Review and remove inactive members to reduce attack surface.",
+    },
+    "GLI003": {
+        "name": "ExternalUserElevatedAccess",
+        "short": "External user with Developer+ access.",
+        "help": "Review whether external users need elevated access levels.",
+    },
+    "GLI004": {
+        "name": "PendingAccessRequests",
+        "short": "Pending group access requests.",
+        "help": "Review and approve or deny pending access requests promptly.",
+    },
+    "GLI005": {
+        "name": "BotServiceAccount",
+        "short": "Bot or service account in group.",
+        "help": "Regularly review bot and service accounts for necessity and access scope.",
+    },
 }
 
 
@@ -706,6 +856,16 @@ def generate_sarif_report(report: dict) -> dict:
         elif rule_id.startswith("AOG"):
             rule_desc["properties"]["tags"].append("project-settings")
         elif rule_id.startswith("AIM"):
+            rule_desc["properties"]["tags"].append("identity")
+        elif rule_id.startswith("GLP"):
+            rule_desc["properties"]["tags"].append("gitlab-pipelines")
+        elif rule_id.startswith("GLB"):
+            rule_desc["properties"]["tags"].append("branch-protection")
+        elif rule_id.startswith("GLS"):
+            rule_desc["properties"]["tags"].append("repo-security")
+        elif rule_id.startswith("GLG"):
+            rule_desc["properties"]["tags"].append("group-settings")
+        elif rule_id.startswith("GLI"):
             rule_desc["properties"]["tags"].append("identity")
         else:
             rule_desc["properties"]["tags"].append("github-actions")

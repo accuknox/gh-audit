@@ -52,3 +52,30 @@ verbosity: 0
 #   - repo: my-org/infra
 #   - repo: ".*-microservice"
 #     regex: true
+
+# -------------------------------------------------------------------
+# GitLab configuration example
+# -------------------------------------------------------------------
+# To audit GitLab, set platform: gitlab and provide your group path.
+# Token is read from GL_AUDIT_TOKEN or GITLAB_TOKEN environment variables.
+#
+# platform: gitlab
+# org: my-gitlab-group          # top-level group path
+#
+# # Self-hosted GitLab (optional, defaults to https://gitlab.com/api/v4)
+# # base_url: https://gitlab.example.com/api/v4
+#
+# # Sub-groups to audit (optional)
+# # groups:
+# #   - sub-group-a
+# #   - sub-group-b
+#
+# # Specific projects to audit (optional, overrides group-wide scan)
+# # repos:
+# #   - my-group/project-a
+# #   - my-group/project-b
+#
+# skip_identity: false
+# skip_group_settings: false
+# skip_pipeline_security: false
+# include_archived: false

@@ -11,6 +11,7 @@ from .auditor import AuditConfig, RepoSpec
 
 CONFIG_TOKEN_ENV = "GH_AUDIT_TOKEN"
 ADO_TOKEN_ENV = "ADO_AUDIT_TOKEN"
+GL_TOKEN_ENV = "GL_AUDIT_TOKEN"
 
 
 def load_config(config_path: str):
@@ -53,6 +54,9 @@ def load_config(config_path: str):
 
     if platform == "azure":
         return _load_ado_config(raw, org, updated_within), *extras
+
+    if platform == "gitlab":
+        return _load_gitlab_config(raw, org, updated_within), *extras
 
     return _load_github_config(raw, org, updated_within), *extras
 
@@ -123,6 +127,38 @@ def _load_ado_config(raw: dict, org: str, updated_within):
         skip_project_settings=bool(raw.get("skip_project_settings", False)),
         skip_pipeline_security=bool(raw.get("skip_pipeline_security", False)),
         include_disabled_repos=bool(raw.get("include_disabled_repos", False)),
+        updated_within_months=updated_within,
+    )
+
+
+def _load_gitlab_config(raw: dict, org: str, updated_within) -> "GitLabAuditConfig":
+    """Load GitLab-specific config."""
+    from .gitlab.gitlab_auditor import GitLabAuditConfig
+
+    # Token from environment
+    token = os.environ.get(GL_TOKEN_ENV, "").strip()
+    if not token:
+        token = os.environ.get("GITLAB_TOKEN", "").strip()
+    if not token:
+        token = os.environ.get(CONFIG_TOKEN_ENV, "").strip()
+    if not token:
+        raise ValueError(
+            f"Environment variable {GL_TOKEN_ENV} is not set. "
+            f"Export your GitLab PAT:\n"
+            f"  export {GL_TOKEN_ENV}=glpat-..."
+        )
+
+    return GitLabAuditConfig(
+        org=org,
+        token=token,
+        base_url=raw.get("base_url", "https://gitlab.com/api/v4"),
+        groups=raw.get("groups", []) or [],
+        repos=raw.get("repos", []) or [],
+        include_archived=bool(raw.get("include_archived", False)),
+        include_forks=bool(raw.get("include_forks", False)),
+        skip_identity=bool(raw.get("skip_identity", False)),
+        skip_group_settings=bool(raw.get("skip_group_settings", False)),
+        skip_pipeline_security=bool(raw.get("skip_pipeline_security", False)),
         updated_within_months=updated_within,
     )
 

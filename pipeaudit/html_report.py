@@ -25,6 +25,13 @@ def generate_html_report(report: dict) -> str:
     severity_counts = meta["findings_by_severity"]
     total_findings = meta["total_findings"]
 
+    # Compute repo-only severity counts for the Repository Details section
+    repo_severity_counts: dict[str, int] = {}
+    for repo in repos:
+        for f in repo.get("findings", []):
+            sev = f.get("severity", "info")
+            repo_severity_counts[sev] = repo_severity_counts.get(sev, 0) + 1
+
     # Sort repos: most findings first, then alphabetically
     sorted_repos = sorted(repos, key=lambda r: (-len(r["findings"]), r["repo"]))
 
@@ -35,14 +42,15 @@ def generate_html_report(report: dict) -> str:
     nav_items = _build_nav_items(report)
 
     platform = meta.get("platform", "github")
-    platform_label = "Azure DevOps" if platform == "azure" else "GitHub"
+    platform_labels = {"azure": "Azure DevOps", "gitlab": "GitLab", "github": "GitHub"}
+    platform_label = platform_labels.get(platform, "GitHub")
 
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AccuKnox {platform_label} Audit &mdash; {_esc(meta['organization'])}</title>
+<title>{platform_label} Audit &mdash; {_esc(meta['organization'])}</title>
 <style>
 {_CSS}
 </style>
@@ -51,7 +59,7 @@ def generate_html_report(report: dict) -> str:
 
 <header>
   <div class="container">
-    <h1>AccuKnox {platform_label} Audit Report</h1>
+    <h1>{platform_label} Audit Report</h1>
     <p class="subtitle">
       Organization: <strong>{_esc(meta['organization'])}</strong>
       &middot; Generated: <strong>{_format_ts(meta['timestamp'])}</strong>
@@ -145,7 +153,7 @@ def generate_html_report(report: dict) -> str:
              placeholder="Filter repositories..." onkeyup="filterRepos()">
       <div class="filter-buttons">
         <button class="filter-btn active" onclick="filterSeverity('all', this)">All</button>
-        {"".join(f'<button class="filter-btn sev-btn-{s}" onclick="filterSeverity({chr(39)}{s}{chr(39)}, this)">{s.upper()} ({severity_counts.get(s, 0)})</button>' for s in SEVERITY_ORDER if severity_counts.get(s, 0) > 0)}
+        {"".join(f'<button class="filter-btn sev-btn-{s}" onclick="filterSeverity({chr(39)}{s}{chr(39)}, this)">{s.upper()} ({repo_severity_counts.get(s, 0)})</button>' for s in SEVERITY_ORDER if repo_severity_counts.get(s, 0) > 0)}
         <span class="toolbar-sep"></span>
         <button class="nav-btn" onclick="expandAllInContainer('repo-list')">Expand All</button>
         <button class="nav-btn" onclick="collapseAllInContainer('repo-list')">Collapse All</button>
@@ -162,7 +170,7 @@ def generate_html_report(report: dict) -> str:
 
 <footer>
   <div class="container">
-    AccuKnox GitHub Audit &middot; {_format_ts(meta['timestamp'])}
+    {platform_label} Audit &middot; {_format_ts(meta['timestamp'])}
   </div>
 </footer>
 
