@@ -2,7 +2,7 @@
 audit-config.yaml
 report.*
 .gh-audit
-
+*.html
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

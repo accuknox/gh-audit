@@ -18,11 +18,11 @@ TOOL_INFO_URI = "https://github.com/accuknox/gh-audit"
 
 # Map our severity levels to SARIF levels
 SEVERITY_TO_SARIF_LEVEL = {
-    "critical": "error",
+    "critical": "critical",
     "high": "error",
     "medium": "warning",
     "low": "note",
-    "info": "note",
+    "info": "none",
 }
 
 # Map our severity to SARIF security-severity score (CVSS-like 0-10)
@@ -534,7 +534,8 @@ def generate_sarif_report(report: dict) -> dict:
                 "ruleId": _descriptive_rule_id(rule_id),
                 "level": SEVERITY_TO_SARIF_LEVEL.get(finding.get("severity", "info"), "note"),
                 "message": {
-                    "text": finding.get("description", finding.get("title", "")),
+                    "text": finding.get("title", ""),
+                    "description": finding.get("description", finding.get("title", "")),
                 },
                 "locations": [
                     {
@@ -572,7 +573,8 @@ def generate_sarif_report(report: dict) -> dict:
             "ruleId": _descriptive_rule_id(rule_id),
             "level": SEVERITY_TO_SARIF_LEVEL.get(finding.get("severity", "info"), "note"),
             "message": {
-                "text": finding.get("description", finding.get("title", "")),
+                "text": finding.get("title", ""),
+                "description": finding.get("description", finding.get("title", "")),
             },
             "locations": [
                 {
@@ -610,7 +612,8 @@ def generate_sarif_report(report: dict) -> dict:
             "ruleId": _descriptive_rule_id(rule_id),
             "level": SEVERITY_TO_SARIF_LEVEL.get(finding.get("severity", "info"), "note"),
             "message": {
-                "text": finding.get("description", finding.get("title", "")),
+                "text": finding.get("title", ""),
+                "description": finding.get("description", finding.get("title", "")),
             },
             "locations": [
                 {
@@ -639,7 +642,8 @@ def generate_sarif_report(report: dict) -> dict:
             "ruleId": _descriptive_rule_id(rule_id),
             "level": SEVERITY_TO_SARIF_LEVEL.get(finding.get("severity", "info"), "note"),
             "message": {
-                "text": finding.get("description", finding.get("title", "")),
+                "text": finding.get("title", ""),
+                "description": finding.get("description", finding.get("title", "")),
             },
             "locations": [
                 {
