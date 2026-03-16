@@ -534,7 +534,8 @@ def generate_sarif_report(report: dict) -> dict:
                 "ruleId": _descriptive_rule_id(rule_id),
                 "level": SEVERITY_TO_SARIF_LEVEL.get(finding.get("severity", "info"), "note"),
                 "message": {
-                    "text": finding.get("description", finding.get("title", "")),
+                    "text": finding.get("title", ""),
+                    "description": finding.get("description", finding.get("title", "")),
                 },
                 "locations": [
                     {
@@ -572,7 +573,8 @@ def generate_sarif_report(report: dict) -> dict:
             "ruleId": _descriptive_rule_id(rule_id),
             "level": SEVERITY_TO_SARIF_LEVEL.get(finding.get("severity", "info"), "note"),
             "message": {
-                "text": finding.get("description", finding.get("title", "")),
+                "text": finding.get("title", ""),
+                "description": finding.get("description", finding.get("title", "")),
             },
             "locations": [
                 {
@@ -610,7 +612,8 @@ def generate_sarif_report(report: dict) -> dict:
             "ruleId": _descriptive_rule_id(rule_id),
             "level": SEVERITY_TO_SARIF_LEVEL.get(finding.get("severity", "info"), "note"),
             "message": {
-                "text": finding.get("description", finding.get("title", "")),
+                "text": finding.get("title", ""),
+                "description": finding.get("description", finding.get("title", "")),
             },
             "locations": [
                 {
@@ -639,7 +642,8 @@ def generate_sarif_report(report: dict) -> dict:
             "ruleId": _descriptive_rule_id(rule_id),
             "level": SEVERITY_TO_SARIF_LEVEL.get(finding.get("severity", "info"), "note"),
             "message": {
-                "text": finding.get("description", finding.get("title", "")),
+                "text": finding.get("title", ""),
+                "description": finding.get("description", finding.get("title", "")),
             },
             "locations": [
                 {
