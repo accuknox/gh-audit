@@ -18,7 +18,7 @@ TOOL_INFO_URI = "https://github.com/accuknox/gh-audit"
 
 # Map our severity levels to SARIF levels
 SEVERITY_TO_SARIF_LEVEL = {
-    "critical": "critical-error",
+    "critical": "critical",
     "high": "error",
     "medium": "warning",
     "low": "note",
