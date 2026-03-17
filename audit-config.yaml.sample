@@ -10,16 +10,13 @@ org: accuknox
 output: report.json
 
 # HTML report output path (optional, omit to skip HTML generation)
-html_output: report.html
+# html_output: report.html
 
 # SARIF v2.1.0 report output path (optional, omit to skip SARIF generation)
-sarif_output: report.sarif
+# sarif_output: report.sarif
 
 # Log file path (optional, captures all repos scanned/skipped with details)
 # log_file: audit.log
-
-# Only scan repos updated (pushed to) within the last N months (optional, omit to scan all)
-updated_within_months: 3
 
 # Include archived repositories (default: false)
 include_archived: false
@@ -27,8 +24,8 @@ include_archived: false
 # Include forked repositories (default: false)
 include_forks: false
 
-# Skip repository security audit (default: false)
-skip_repo_security: false
+# Only scan repos updated (pushed to) within the last N months (optional, omit to scan all)
+# updated_within_months: 3
 
 # Skip identity/access audit (org members, teams, collaborators) (default: false)
 skip_identity: false
