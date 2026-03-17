@@ -26,7 +26,7 @@ class TestAdoConfigLoading:
             "projects": ["ProjectA", "ProjectB"],
         })
         try:
-            config, output, verbosity, html, sarif, log = load_config(path)
+            config, output, verbosity, html, sarif, log, *_ = load_config(path)
             from pipeaudit.azure.ado_auditor import AdoAuditConfig
             assert isinstance(config, AdoAuditConfig)
             assert config.org == "my-ado-org"

@@ -50,6 +50,7 @@ def load_config(config_path: str):
         raw.get("html_output", None),
         raw.get("sarif_output", None),
         raw.get("log_file", None),
+        raw.get("cis_output", None),
     )
 
     if platform == "azure":

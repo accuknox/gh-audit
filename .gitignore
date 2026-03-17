@@ -1,4 +1,7 @@
 .venv
+CIS_GitHub_Benchmark_v1.2.0_PDF.pdf
+github-audit-config.yaml
+gitlab-audit-config.yaml
 audit-config.yaml
 report.*
 .gh-audit
