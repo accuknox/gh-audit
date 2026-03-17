@@ -144,6 +144,15 @@ def main():
         help="(GitLab) Specific sub-groups to audit.",
     )
     parser.add_argument(
+        "--base-url",
+        metavar="URL",
+        default=None,
+        help=(
+            "(GitLab) Base API URL for self-hosted instances "
+            "(default: https://gitlab.com/api/v4)."
+        ),
+    )
+    parser.add_argument(
         "--output", "-o",
         help="Output file for the JSON report (default: stdout).",
     )
@@ -339,7 +348,7 @@ def main():
         from .gitlab.gitlab_token_validator import GitLabTokenError, validate_gitlab_token
         from .gitlab.gitlab_auditor import GitLabAuditConfig, run_gitlab_audit
 
-        base_url = getattr(config, "base_url", "https://gitlab.com/api/v4") if config else "https://gitlab.com/api/v4"
+        base_url = args.base_url or (getattr(config, "base_url", None) if config else None) or "https://gitlab.com/api/v4"
 
         if use_tui:
             console.print("[bold blue]Validating GitLab token...[/bold blue]")
