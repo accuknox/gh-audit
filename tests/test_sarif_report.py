@@ -182,13 +182,17 @@ class TestSeverityMappings:
             assert sev in SEVERITY_TO_SCORE
             assert float(SEVERITY_TO_SCORE[sev]) > 0
 
-    def test_critical_high_map_to_error(self):
-        assert SEVERITY_TO_SARIF_LEVEL["critical"] == "error"
+    def test_critical_maps_to_critical(self):
+        assert SEVERITY_TO_SARIF_LEVEL["critical"] == "critical"
+
+    def test_high_maps_to_error(self):
         assert SEVERITY_TO_SARIF_LEVEL["high"] == "error"
 
     def test_medium_maps_to_warning(self):
         assert SEVERITY_TO_SARIF_LEVEL["medium"] == "warning"
 
-    def test_low_info_map_to_note(self):
+    def test_low_maps_to_note(self):
         assert SEVERITY_TO_SARIF_LEVEL["low"] == "note"
-        assert SEVERITY_TO_SARIF_LEVEL["info"] == "note"
+
+    def test_info_maps_to_none(self):
+        assert SEVERITY_TO_SARIF_LEVEL["info"] == "none"

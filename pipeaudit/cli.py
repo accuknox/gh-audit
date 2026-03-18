@@ -167,6 +167,11 @@ def main():
         help="Generate a SARIF v2.1.0 report at the given path.",
     )
     parser.add_argument(
+        "--cis",
+        metavar="FILE",
+        help="Generate a CIS GitHub Benchmark report in kube-bench JSON format.",
+    )
+    parser.add_argument(
         "--include-archived",
         action="store_true",
         default=None,
@@ -245,7 +250,7 @@ def main():
     # Load config file if provided, then overlay CLI args
     if args.config:
         try:
-            config, cfg_output, cfg_verbosity, cfg_html, cfg_sarif, cfg_log = load_config(args.config)
+            config, cfg_output, cfg_verbosity, cfg_html, cfg_sarif, cfg_log, cfg_cis = load_config(args.config)
             # Config file may specify platform
             if hasattr(config, "platform"):
                 platform = config.platform
@@ -259,6 +264,7 @@ def main():
         cfg_html = None
         cfg_sarif = None
         cfg_log = None
+        cfg_cis = None
 
     # CLI --platform always wins
     if args.platform != "github":
@@ -270,6 +276,7 @@ def main():
     output = args.output or (cfg_output if config else "-")
     html_output = args.html or cfg_html
     sarif_output = args.sarif or cfg_sarif
+    cis_output = args.cis or cfg_cis
     log_file = args.log or cfg_log
     verbosity = args.verbose if args.verbose is not None else cfg_verbosity
     include_archived = args.include_archived if args.include_archived is not None else (config.include_archived if config else False)
@@ -550,6 +557,17 @@ def main():
             )
         else:
             print(f"SARIF report written to {sarif_output}", file=sys.stderr)
+
+    # Output CIS benchmark report
+    if cis_output:
+        from .cis_report import write_cis_report
+        write_cis_report(report, cis_output)
+        if use_tui:
+            console.print(
+                f"[bold green]CIS benchmark report written to {cis_output}[/bold green]"
+            )
+        else:
+            print(f"CIS benchmark report written to {cis_output}", file=sys.stderr)
 
     if log_file:
         if use_tui:

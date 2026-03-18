@@ -15,6 +15,9 @@ output: report.json
 # SARIF v2.1.0 report output path (optional, omit to skip SARIF generation)
 # sarif_output: report.sarif
 
+# CIS GitHub Benchmark v1.2.0 report in kube-bench JSON format (optional, GitHub only)
+# cis_output: cis-report.json
+
 # Log file path (optional, captures all repos scanned/skipped with details)
 # log_file: audit.log
 

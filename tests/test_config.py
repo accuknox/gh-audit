@@ -20,7 +20,7 @@ class TestLoadConfig:
         monkeypatch.setenv(CONFIG_TOKEN_ENV, "ghp_testtoken123")
         path = _write_config(tmp_path, {"org": "my-org"})
 
-        config, output, verbosity, html_output, sarif_output, log_file = load_config(path)
+        config, output, verbosity, html_output, sarif_output, log_file, cis_output = load_config(path)
 
         assert config.org == "my-org"
         assert config.token == "ghp_testtoken123"
@@ -32,6 +32,7 @@ class TestLoadConfig:
         assert html_output is None
         assert sarif_output is None
         assert log_file is None
+        assert cis_output is None
 
     def test_loads_full_config(self, tmp_path, monkeypatch):
         monkeypatch.setenv(CONFIG_TOKEN_ENV, "ghp_testtoken123")
@@ -48,7 +49,7 @@ class TestLoadConfig:
             ],
         })
 
-        config, output, verbosity, html_output, sarif_output, log_file = load_config(path)
+        config, output, verbosity, html_output, sarif_output, log_file, cis_output = load_config(path)
 
         assert config.org == "my-org"
         assert output == "report.json"
@@ -69,7 +70,7 @@ class TestLoadConfig:
             "repos": ["my-org/frontend", "backend"],
         })
 
-        config, _, _, _, _, _ = load_config(path)
+        config, *_ = load_config(path)
 
         assert len(config.repo_specs) == 2
         assert config.repo_specs[0].owner == "my-org"
@@ -84,7 +85,7 @@ class TestLoadConfig:
             "html_output": "report.html",
         })
 
-        config, _, _, html_output, _, _ = load_config(path)
+        config, _, _, html_output, *_ = load_config(path)
         assert html_output == "report.html"
 
     def test_loads_sarif_output(self, tmp_path, monkeypatch):
@@ -94,7 +95,7 @@ class TestLoadConfig:
             "sarif_output": "report.sarif",
         })
 
-        config, _, _, _, sarif_output, _ = load_config(path)
+        config, _, _, _, sarif_output, *_ = load_config(path)
         assert sarif_output == "report.sarif"
 
     def test_loads_regex_repo_spec(self, tmp_path, monkeypatch):
@@ -107,7 +108,7 @@ class TestLoadConfig:
             ],
         })
 
-        config, _, _, _, _, _ = load_config(path)
+        config, *_ = load_config(path)
 
         assert len(config.repo_specs) == 2
         assert config.repo_specs[0].repo == "frontend-.*"
@@ -124,7 +125,7 @@ class TestLoadConfig:
             ],
         })
 
-        config, _, _, _, _, _ = load_config(path)
+        config, *_ = load_config(path)
 
         assert config.repo_specs[0].is_regex is True
         assert config.repo_specs[0].branch == "release-.*"
@@ -136,7 +137,7 @@ class TestLoadConfig:
             "log_file": "audit.log",
         })
 
-        config, _, _, _, _, log_file = load_config(path)
+        config, _, _, _, _, log_file, *_ = load_config(path)
         assert log_file == "audit.log"
 
     def test_fails_without_token_env(self, tmp_path, monkeypatch):
