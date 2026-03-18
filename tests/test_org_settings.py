@@ -153,6 +153,8 @@ class TestOrgSettings:
             json={
                 "two_factor_requirement_enabled": True,
                 "default_repository_permission": "read",
+                "members_can_create_repositories": False,
+                "is_verified": True,
             },
         )
         responses.add(
@@ -195,3 +197,59 @@ class TestOrgSettings:
         # No ORG003-ORG005 since actions permissions unavailable
         assert "ORG003" not in rule_ids
         assert "ORG004" not in rule_ids
+
+    @responses.activate
+    def test_repo_creation_not_restricted(self):
+        """Members can create repos => ORG006."""
+        responses.add(
+            responses.GET,
+            f"{GITHUB_API}/orgs/testorg",
+            json={
+                "two_factor_requirement_enabled": True,
+                "default_repository_permission": "read",
+                "members_can_create_repositories": True,
+                "members_can_create_public_repositories": True,
+                "members_can_create_private_repositories": True,
+                "is_verified": True,
+            },
+        )
+        responses.add(
+            responses.GET,
+            f"{GITHUB_API}/orgs/testorg/actions/permissions",
+            json={"allowed_actions": "selected", "default_workflow_permissions": "read"},
+        )
+
+        client = GitHubClient("test-token")
+        result = audit_org_settings(client, "testorg")
+
+        rule_ids = [f["rule_id"] for f in result["findings"]]
+        assert "ORG006" in rule_ids
+        org006 = [f for f in result["findings"] if f["rule_id"] == "ORG006"]
+        assert org006[0]["severity"] == "medium"
+
+    @responses.activate
+    def test_org_not_verified(self):
+        """Org not verified => ORG007."""
+        responses.add(
+            responses.GET,
+            f"{GITHUB_API}/orgs/testorg",
+            json={
+                "two_factor_requirement_enabled": True,
+                "default_repository_permission": "read",
+                "members_can_create_repositories": False,
+                "is_verified": False,
+            },
+        )
+        responses.add(
+            responses.GET,
+            f"{GITHUB_API}/orgs/testorg/actions/permissions",
+            json={"allowed_actions": "selected", "default_workflow_permissions": "read"},
+        )
+
+        client = GitHubClient("test-token")
+        result = audit_org_settings(client, "testorg")
+
+        rule_ids = [f["rule_id"] for f in result["findings"]]
+        assert "ORG007" in rule_ids
+        org007 = [f for f in result["findings"] if f["rule_id"] == "ORG007"]
+        assert org007[0]["severity"] == "low"

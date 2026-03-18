@@ -261,6 +261,28 @@ class GitHubClient:
         )
 
     # -----------------------------------------------------------------
+    # Branch listing
+    # -----------------------------------------------------------------
+
+    def list_branches(self, owner: str, repo: str) -> list[dict]:
+        """List all branches in a repository."""
+        return self._paginate(
+            f"{GITHUB_API}/repos/{owner}/{repo}/branches",
+            params={"per_page": 100},
+        )
+
+    def get_commit(self, owner: str, repo: str, sha: str) -> dict | None:
+        """Fetch a single commit by SHA. Returns None on 404/403."""
+        resp = self._session.get(
+            f"{GITHUB_API}/repos/{owner}/{repo}/commits/{sha}",
+            timeout=30,
+        )
+        if resp.status_code in (403, 404):
+            return None
+        resp.raise_for_status()
+        return resp.json()
+
+    # -----------------------------------------------------------------
     # Helpers
     # -----------------------------------------------------------------
 

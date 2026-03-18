@@ -7,6 +7,7 @@ producing findings about overly-broad access and risky configurations.
 from __future__ import annotations
 
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, asdict
 from datetime import datetime, timedelta, timezone
 
@@ -52,21 +53,27 @@ def audit_identity(
     member_logins: set[str] = set()
     org_members_report = []
 
-    for m in all_members:
+    # Verify roles concurrently (up to 6 at a time)
+    def _check_role(m: dict) -> tuple[str, str, str]:
         login = m["login"]
-        _status(f"  Verifying role: {login}...")
         membership = client.get_org_membership(org, login)
         if membership and membership.get("role") == "admin":
-            role = "owner"
-            owner_logins.add(login)
-        else:
-            role = "member"
-            member_logins.add(login)
-        org_members_report.append({
-            "login": login,
-            "role": role,
-            "avatar_url": m.get("avatar_url", ""),
-        })
+            return (login, "owner", m.get("avatar_url", ""))
+        return (login, "member", m.get("avatar_url", ""))
+
+    _status(f"Verifying roles for {len(all_members)} members...")
+    workers = min(6, len(all_members)) if all_members else 1
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        for login, role, avatar_url in pool.map(_check_role, all_members):
+            if role == "owner":
+                owner_logins.add(login)
+            else:
+                member_logins.add(login)
+            org_members_report.append({
+                "login": login,
+                "role": role,
+                "avatar_url": avatar_url,
+            })
 
     admin_logins = owner_logins
     all_logins = owner_logins | member_logins
@@ -385,36 +392,40 @@ def _find_inactive_members(
     inactive_3m: set[str] = set()
     inactive_1m: set[str] = set()
 
-    for login in sorted(all_logins):
-        _status(f"  Checking activity: {login}...")
-
-        # Single query: search for commits in the last 6 months
+    def _check_activity(login: str) -> tuple[str, str | None]:
+        """Returns (login, bucket) where bucket is '6m', '3m', '1m', or None."""
         result = client.search_user_commits_in_org(org, login, date_6m)
 
         if result["total_count"] == -1:
-            # API error (rate limit etc.) — skip this user
             logger.warning("Could not check activity for %s, skipping", login)
-            continue
+            return (login, None)
 
         if result["total_count"] == 0:
-            # No commits in last 6 months
-            inactive_6m.add(login)
-            continue
+            return (login, "6m")
 
-        # Has commits in last 6 months — check when the most recent one was
         last_commit_date = _extract_commit_date(result)
-
         if last_commit_date is None:
-            # Couldn't parse date, but they have commits — assume active
-            continue
+            return (login, None)
 
         if last_commit_date < (now - timedelta(days=90)):
-            # Last commit was 3-6 months ago
-            inactive_3m.add(login)
+            return (login, "3m")
         elif last_commit_date < (now - timedelta(days=30)):
-            # Last commit was 1-3 months ago
-            inactive_1m.add(login)
-        # else: active within last month — no finding
+            return (login, "1m")
+        return (login, None)
+
+    # Check activity concurrently — search API has its own rate limit (30/min)
+    # so cap workers at 4 to avoid 403s
+    _status(f"Checking activity for {len(all_logins)} members...")
+    logins_list = sorted(all_logins)
+    workers = min(4, len(logins_list)) if logins_list else 1
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        for login, bucket in pool.map(_check_activity, logins_list):
+            if bucket == "6m":
+                inactive_6m.add(login)
+            elif bucket == "3m":
+                inactive_3m.add(login)
+            elif bucket == "1m":
+                inactive_1m.add(login)
 
     return inactive_6m, inactive_3m, inactive_1m
 

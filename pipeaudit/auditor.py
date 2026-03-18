@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Callable, Protocol
@@ -121,8 +122,34 @@ def run_audit(
         "repos": [],
     }
 
-    for repo_meta, branch in repos_to_audit:
-        repo_report = _audit_repo(client, repo_meta, branch, progress)
+    # Scan repos concurrently (4 threads to stay within rate limits)
+    max_workers = min(4, len(repos_to_audit)) if repos_to_audit else 1
+    repo_reports: list[tuple[int, dict]] = []
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_idx = {
+            executor.submit(_audit_repo, client, repo_meta, branch, progress): idx
+            for idx, (repo_meta, branch) in enumerate(repos_to_audit)
+        }
+        for future in as_completed(future_to_idx):
+            idx = future_to_idx[future]
+            try:
+                repo_report = future.result()
+            except Exception as e:
+                repo_meta, branch = repos_to_audit[idx]
+                logger.warning("Audit failed for %s: %s", repo_meta["full_name"], e)
+                repo_report = {
+                    "repo": repo_meta["full_name"],
+                    "branch": branch,
+                    "visibility": "private",
+                    "workflows_scanned": 0,
+                    "findings": [],
+                    "error": str(e),
+                }
+            repo_reports.append((idx, repo_report))
+
+    # Maintain original ordering
+    for _, repo_report in sorted(repo_reports):
         report["repos"].append(repo_report)
 
         report["audit_metadata"]["total_repos_scanned"] += 1
@@ -468,7 +495,13 @@ def _audit_repo(
     _audit_branch_protection(client, owner, repo, branch, repo_report)
 
     # Repository security features audit
-    _audit_repo_security(client, owner, repo, branch, repo_meta, repo_report)
+    _audit_repo_security(client, owner, repo, branch, repo_meta, repo_report, workflow_files)
+
+    # Inactive branches check (CIS 1.1.8)
+    _audit_inactive_branches(client, owner, repo, repo_report)
+
+    # Inactive repository check (CIS 1.2.7)
+    _audit_inactive_repo(repo_meta, repo_report)
 
     logger.info("Done: %s — %d workflow(s), %d finding(s)", full_name, repo_report["workflows_scanned"], len(repo_report["findings"]))
     progress.on_repo_done(full_name, len(repo_report["findings"]))
@@ -583,6 +616,37 @@ def _audit_branch_protection(
                 f"anyone with push access can rewrite branch history, potentially "
                 f"removing security fixes or injecting malicious code. Disable force "
                 f"pushes on protected branches."
+            ),
+            "workflow_file": "",
+        })
+
+    # Rule 11: Branches must be up to date before merging (CIS 1.1.10)
+    status_checks_for_strict = protection.get("required_status_checks")
+    if status_checks_for_strict:
+        if not status_checks_for_strict.get("strict", False):
+            repo_report["findings"].append({
+                "rule_id": "BPR011",
+                "severity": "medium",
+                "title": f"Branches not required to be up-to-date on '{branch}'",
+                "description": (
+                    f"Branch '{branch}' in {full_name} has status checks but does not "
+                    f"require branches to be up-to-date before merging. Enable 'Require "
+                    f"branches to be up to date before merging' to prevent merging stale code."
+                ),
+                "workflow_file": "",
+            })
+
+    # Rule 12: Branch protection enforced for administrators (CIS 1.1.14)
+    if not enforce_admins_enabled:
+        repo_report["findings"].append({
+            "rule_id": "BPR012",
+            "severity": "high",
+            "title": f"Branch protection not enforced for admins on '{branch}'",
+            "description": (
+                f"Branch '{branch}' in {full_name} does not enforce branch protection "
+                f"for administrators. Admins can bypass all protection rules including "
+                f"required reviews, status checks, and force push restrictions. "
+                f"Enable 'Include administrators' (enforce_admins)."
             ),
             "workflow_file": "",
         })
@@ -724,6 +788,7 @@ def _audit_repo_security(
     branch: str,
     repo_meta: dict,
     repo_report: dict,
+    workflow_files: list[str] | None = None,
 ) -> None:
     """Check repository security features and append findings to repo_report."""
     full_name = f"{owner}/{repo}"
@@ -775,17 +840,26 @@ def _audit_repo_security(
                 "workflow_file": "",
             })
 
-    # SEC004: CODEOWNERS file
+    # SEC004 & SEC005: Check for CODEOWNERS and SECURITY.md concurrently
     codeowners_paths = ["CODEOWNERS", ".github/CODEOWNERS", "docs/CODEOWNERS"]
-    has_codeowners = False
-    for path in codeowners_paths:
+    security_paths = ["SECURITY.md", ".github/SECURITY.md"]
+    all_check_paths = codeowners_paths + security_paths
+
+    def _file_exists(path: str) -> tuple[str, bool]:
         try:
             content = client.get_file_content(owner, repo, path, branch)
-            if content is not None:
-                has_codeowners = True
-                break
+            return (path, content is not None)
         except Exception:
-            continue
+            return (path, False)
+
+    found_paths: set[str] = set()
+    with ThreadPoolExecutor(max_workers=len(all_check_paths)) as pool:
+        for path, exists in pool.map(_file_exists, all_check_paths):
+            if exists:
+                found_paths.add(path)
+
+    has_codeowners = any(p in found_paths for p in codeowners_paths)
+    has_security_md = any(p in found_paths for p in security_paths)
 
     if not has_codeowners:
         repo_report["findings"].append({
@@ -800,18 +874,6 @@ def _audit_repo_security(
             "workflow_file": "",
         })
 
-    # SEC005: SECURITY.md file
-    security_paths = ["SECURITY.md", ".github/SECURITY.md"]
-    has_security_md = False
-    for path in security_paths:
-        try:
-            content = client.get_file_content(owner, repo, path, branch)
-            if content is not None:
-                has_security_md = True
-                break
-        except Exception:
-            continue
-
     if not has_security_md:
         repo_report["findings"].append({
             "rule_id": "SEC005",
@@ -820,6 +882,149 @@ def _audit_repo_security(
             "description": (
                 f"Repository {full_name} has no SECURITY.md file. Add a security policy "
                 f"to tell users how to responsibly report vulnerabilities."
+            ),
+            "workflow_file": "",
+        })
+
+    # SEC007: Code vulnerability scanning (CodeQL / code scanning)
+    # Check if advanced_security or code_scanning is enabled, or a CodeQL workflow exists
+    has_code_scanning = False
+    adv_sec = security_and_analysis.get("advanced_security") or {}
+    if adv_sec.get("status") == "enabled":
+        has_code_scanning = True
+
+    if not has_code_scanning and workflow_files:
+        # Check for CodeQL workflow file (reuses already-fetched list)
+        for wf in workflow_files:
+            wf_lower = wf.lower()
+            if "codeql" in wf_lower or "code-scanning" in wf_lower:
+                has_code_scanning = True
+                break
+
+    if not has_code_scanning:
+        repo_report["findings"].append({
+            "rule_id": "SEC007",
+            "severity": "medium",
+            "title": f"No code vulnerability scanning on {full_name}",
+            "description": (
+                f"Repository {full_name} does not have code scanning (e.g., CodeQL) "
+                f"enabled. Enable GitHub Advanced Security code scanning or add a "
+                f"CodeQL analysis workflow to detect vulnerabilities in source code."
+            ),
+            "workflow_file": "",
+        })
+
+
+def _audit_inactive_branches(
+    client: GitHubClient,
+    owner: str,
+    repo: str,
+    repo_report: dict,
+) -> None:
+    """Check for inactive branches with no commits in 6+ months (CIS 1.1.8).
+
+    Uses concurrent requests and caps at 50 branches to avoid excessive API usage.
+    """
+    full_name = f"{owner}/{repo}"
+    default_branch = repo_report.get("default_branch", "main")
+
+    try:
+        branches = client.list_branches(owner, repo)
+    except Exception as e:
+        logger.debug("Could not list branches for %s: %s", full_name, e)
+        return
+
+    # Filter out default branch and cap to avoid hammering the API
+    non_default = [
+        b for b in branches
+        if b.get("name", "") != default_branch and b.get("commit", {}).get("sha")
+    ]
+    if not non_default:
+        return
+
+    MAX_BRANCHES = 50
+    capped = len(non_default) > MAX_BRANCHES
+    check_branches = non_default[:MAX_BRANCHES]
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=180)
+    inactive_branches: list[str] = []
+
+    def _check_branch(branch_info: dict) -> str | None:
+        commit_sha = branch_info["commit"]["sha"]
+        try:
+            commit = client.get_commit(owner, repo, commit_sha)
+        except Exception:
+            return None
+        if commit is None:
+            return None
+        commit_date_str = (
+            commit.get("commit", {}).get("committer", {}).get("date")
+            or commit.get("commit", {}).get("author", {}).get("date")
+        )
+        if not commit_date_str:
+            return None
+        try:
+            commit_date = datetime.fromisoformat(commit_date_str.replace("Z", "+00:00"))
+        except (ValueError, TypeError):
+            return None
+        if commit_date < cutoff:
+            return branch_info["name"]
+        return None
+
+    # Fetch commit dates concurrently (up to 6 at a time)
+    with ThreadPoolExecutor(max_workers=min(6, len(check_branches))) as pool:
+        for result in pool.map(_check_branch, check_branches):
+            if result:
+                inactive_branches.append(result)
+
+    if inactive_branches:
+        extra = ""
+        if capped:
+            extra = (
+                f" (checked {MAX_BRANCHES} of {len(non_default)} non-default branches)"
+            )
+        repo_report["findings"].append({
+            "rule_id": "SEC006",
+            "severity": "low",
+            "title": f"{len(inactive_branches)} inactive branch(es) in {full_name}",
+            "description": (
+                f"Repository {full_name} has {len(inactive_branches)} branch(es) with "
+                f"no commits in the last 6 months: {', '.join(inactive_branches[:10])}"
+                f"{'...' if len(inactive_branches) > 10 else ''}.{extra} "
+                f"Inactive branches should be periodically reviewed and removed to "
+                f"reduce the attack surface and keep the repository clean."
+            ),
+            "workflow_file": "",
+            "branches": inactive_branches,
+        })
+
+
+def _audit_inactive_repo(repo_meta: dict, repo_report: dict) -> None:
+    """Flag repos with no recent activity that should be archived (CIS 1.2.7)."""
+    full_name = repo_meta.get("full_name", "")
+    if repo_meta.get("archived", False):
+        return  # Already archived
+
+    pushed_at = repo_meta.get("pushed_at")
+    if not pushed_at:
+        return
+
+    try:
+        pushed = datetime.fromisoformat(pushed_at.replace("Z", "+00:00"))
+    except (ValueError, TypeError):
+        return
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=180)
+    if pushed < cutoff:
+        repo_report["findings"].append({
+            "rule_id": "SEC008",
+            "severity": "info",
+            "title": f"Repository {full_name} appears inactive",
+            "description": (
+                f"Repository {full_name} has not been pushed to since "
+                f"{pushed.strftime('%Y-%m-%d')} (over 6 months). Consider archiving "
+                f"inactive repositories to clearly signal they are no longer maintained "
+                f"and to prevent accidental modifications."
             ),
             "workflow_file": "",
         })

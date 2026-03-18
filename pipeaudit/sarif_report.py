@@ -244,6 +244,16 @@ _RULE_HELP = {
         "short": "Conversation resolution not required before merging.",
         "help": "Enable 'Require conversation resolution' to ensure all review comments are addressed.",
     },
+    "BPR011": {
+        "name": "BranchesNotUpToDate",
+        "short": "Branches not required to be up-to-date before merging.",
+        "help": "Enable 'Require branches to be up to date before merging' in status checks to prevent merging stale code.",
+    },
+    "BPR012": {
+        "name": "BranchProtectionNotEnforcedForAdmins",
+        "short": "Branch protection not enforced for administrators.",
+        "help": "Enable 'Include administrators' (enforce_admins) so admins cannot bypass protection rules.",
+    },
     "SEC001": {
         "name": "SecretScanningDisabled",
         "short": "Secret scanning not enabled on repository.",
@@ -269,6 +279,21 @@ _RULE_HELP = {
         "short": "No SECURITY.md file in repository.",
         "help": "Add a SECURITY.md to tell users how to responsibly report vulnerabilities.",
     },
+    "SEC006": {
+        "name": "InactiveBranches",
+        "short": "Repository has inactive branches with no commits in 6+ months.",
+        "help": "Review and remove inactive branches to reduce attack surface and maintain repository hygiene.",
+    },
+    "SEC007": {
+        "name": "NoCodeVulnerabilityScanning",
+        "short": "No code vulnerability scanning (CodeQL) enabled.",
+        "help": "Enable GitHub Advanced Security code scanning or add a CodeQL workflow.",
+    },
+    "SEC008": {
+        "name": "InactiveRepository",
+        "short": "Repository appears inactive (no pushes in 6+ months).",
+        "help": "Archive inactive repositories to signal they are no longer maintained.",
+    },
     "ORG001": {
         "name": "TwoFactorNotRequired",
         "short": "Organization does not require two-factor authentication.",
@@ -293,6 +318,16 @@ _RULE_HELP = {
         "name": "ForkPRWorkflowsNoApproval",
         "short": "Fork PR workflows may run without approval.",
         "help": "Require approval for all fork pull request workflows to prevent malicious execution.",
+    },
+    "ORG006": {
+        "name": "RepoCreationNotRestricted",
+        "short": "Repository creation not restricted to admins.",
+        "help": "Restrict repository creation to admins or specific teams to maintain governance.",
+    },
+    "ORG007": {
+        "name": "OrgNotVerified",
+        "short": "Organization identity not verified.",
+        "help": "Verify your organization's domain to confirm identity.",
     },
     # GitHub Apps & Tokens (APP001-APP005, PAT001-PAT005)
     "APP001": {

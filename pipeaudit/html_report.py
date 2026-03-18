@@ -142,6 +142,8 @@ def generate_html_report(report: dict) -> str:
 
 {_render_apps_and_tokens_section(report.get("apps_and_tokens"))}
 
+{_render_cis_section(report.get("cis_benchmark"))}
+
 <!-- Per-Repo Details -->
 <section class="card collapsible" id="sec-repos">
   <h2 class="section-toggle" onclick="toggleSection(this)">
@@ -270,6 +272,9 @@ def _build_nav_items(report: dict) -> str:
     apps_tokens = report.get("apps_and_tokens")
     if apps_tokens and "error" not in apps_tokens:
         items.append(("sec-apps-tokens", "Apps & Tokens"))
+    cis_data = report.get("cis_benchmark")
+    if cis_data:
+        items.append(("sec-cis", "CIS Benchmark"))
     items.append(("sec-repos", "Repositories"))
     return "".join(
         f'<a class="nav-link" href="#{sid}">{label}</a>'
@@ -569,6 +574,112 @@ def _render_org_settings_section(org_settings: dict | None) -> str:
   </h2>
   <div class="section-body">
     <p class="empty">No organization settings findings.</p>
+  </div>
+</section>""")
+
+    return "\n".join(parts)
+
+
+def _render_cis_section(cis_data: dict | None) -> str:
+    """Render the CIS Benchmark section."""
+    if not cis_data:
+        return ""
+
+    total_pass = cis_data.get("total_pass", 0)
+    total_fail = cis_data.get("total_fail", 0)
+    total_warn = cis_data.get("total_warn", 0)
+    total_controls = total_pass + total_fail + total_warn
+    pass_pct = (total_pass / total_controls * 100) if total_controls else 0
+
+    CIS_STATUS_COLORS = {
+        "PASS": {"bg": "#16a34a", "badge": "#bbf7d0", "text": "#166534"},
+        "FAIL": {"bg": "#dc2626", "badge": "#fecaca", "text": "#991b1b"},
+        "WARN": {"bg": "#ca8a04", "badge": "#fef08a", "text": "#854d0e"},
+        "INFO": {"bg": "#6b7280", "badge": "#e5e7eb", "text": "#374151"},
+    }
+
+    def _cis_badge(status: str) -> str:
+        c = CIS_STATUS_COLORS.get(status, CIS_STATUS_COLORS["INFO"])
+        return f'<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:0.75em;font-weight:600;background:{c["badge"]};color:{c["text"]}">{status}</span>'
+
+    # Summary cards
+    parts = [f"""
+<section class="card collapsible" id="sec-cis">
+  <h2 class="section-toggle" onclick="toggleSection(this)">
+    <span class="toggle-icon open">&#9660;</span> CIS GitHub Benchmark v1.2.0
+  </h2>
+  <div class="section-body">
+
+<section class="summary-grid">
+  <div class="card stat-card">
+    <div class="stat-number" style="color:#16a34a">{total_pass}</div>
+    <div class="stat-label">PASS</div>
+  </div>
+  <div class="card stat-card">
+    <div class="stat-number" style="color:#dc2626">{total_fail}</div>
+    <div class="stat-label">FAIL</div>
+  </div>
+  <div class="card stat-card">
+    <div class="stat-number" style="color:#ca8a04">{total_warn}</div>
+    <div class="stat-label">NOT ASSESSED</div>
+  </div>
+  <div class="card stat-card">
+    <div class="stat-number">{pass_pct:.0f}%</div>
+    <div class="stat-label">Compliance ({total_pass}/{total_controls})</div>
+  </div>
+</section>
+
+<div style="margin-bottom:12px">
+  <div style="background:#e5e7eb;border-radius:6px;height:20px;overflow:hidden;display:flex">
+    <div style="width:{(total_pass/total_controls*100) if total_controls else 0:.1f}%;background:#16a34a;height:100%" title="PASS: {total_pass}"></div>
+    <div style="width:{(total_fail/total_controls*100) if total_controls else 0:.1f}%;background:#dc2626;height:100%" title="FAIL: {total_fail}"></div>
+    <div style="width:{(total_warn/total_controls*100) if total_controls else 0:.1f}%;background:#ca8a04;height:100%" title="NOT ASSESSED: {total_warn}"></div>
+  </div>
+</div>
+"""]
+
+    # Render each section group
+    for group in cis_data.get("tests", []):
+        section_desc = _esc(group.get("desc", ""))
+        g_pass = group.get("pass", 0)
+        g_fail = group.get("fail", 0)
+        g_warn = group.get("warn", 0)
+        g_total = g_pass + g_fail + g_warn
+
+        rows = []
+        for check in group.get("results", []):
+            status = check.get("status", "WARN")
+            test_num = _esc(check.get("test_number", ""))
+            test_desc = _esc(check.get("test_desc", ""))
+            reason = _esc(check.get("reason", ""))
+            remediation = _esc(check.get("remediation", ""))
+
+            rows.append(
+                f'<tr class="cis-row" data-cis-status="{status}">'
+                f'<td style="white-space:nowrap"><code>{test_num}</code></td>'
+                f'<td>{_cis_badge(status)}</td>'
+                f'<td>'
+                f'<div style="font-weight:500">{test_desc}</div>'
+                f'<div style="font-size:0.85em;color:#6b7280;margin-top:2px">{reason}</div>'
+                f'</td></tr>'
+            )
+
+        status_summary = f'<span style="color:#16a34a;font-weight:600">{g_pass}P</span> / <span style="color:#dc2626;font-weight:600">{g_fail}F</span> / <span style="color:#ca8a04;font-weight:600">{g_warn}W</span>'
+
+        parts.append(f"""
+<div class="collapsible" style="margin-bottom:8px">
+  <h3 class="section-toggle" onclick="toggleSection(this)" style="padding:8px 12px;margin:0;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;cursor:pointer;font-size:0.95em">
+    <span class="toggle-icon">&#9654;</span> {section_desc} &mdash; {status_summary}
+  </h3>
+  <div class="section-body" style="display:none">
+    <table class="data-table">
+      <thead><tr><th style="width:70px">Control</th><th style="width:70px">Status</th><th>Description</th></tr></thead>
+      <tbody>{"".join(rows)}</tbody>
+    </table>
+  </div>
+</div>""")
+
+    parts.append("""
   </div>
 </section>""")
 

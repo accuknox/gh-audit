@@ -54,6 +54,44 @@ def audit_org_settings(client: GitHubClient, org: str) -> dict:
             ),
         })
 
+    # ORG006: Repository creation not restricted
+    if org_data.get("members_can_create_repositories", True):
+        # Also check specific types
+        can_create_public = org_data.get("members_can_create_public_repositories", True)
+        can_create_private = org_data.get("members_can_create_private_repositories", True)
+        if can_create_public or can_create_private:
+            repo_types = []
+            if can_create_public:
+                repo_types.append("public")
+            if can_create_private:
+                repo_types.append("private")
+            findings.append({
+                "rule_id": "ORG006",
+                "severity": "medium",
+                "title": f"Repository creation not restricted in org '{org}'",
+                "description": (
+                    f"Organization '{org}' allows all members to create "
+                    f"{' and '.join(repo_types)} repositories. Restrict repository "
+                    f"creation to admins or specific teams to maintain governance."
+                ),
+            })
+
+    # ORG007: Organization not verified
+    if not org_data.get("is_verified", False):
+        findings.append({
+            "rule_id": "ORG007",
+            "severity": "low",
+            "title": f"Organization '{org}' is not verified",
+            "description": (
+                f"Organization '{org}' does not have a verified badge. Verify "
+                f"your organization's domain to confirm identity and restrict "
+                f"email notifications to verified domains."
+            ),
+        })
+
+    settings["members_can_create_repositories"] = org_data.get("members_can_create_repositories")
+    settings["is_verified"] = org_data.get("is_verified")
+
     # ORG003-ORG005: Actions permissions
     actions_perms = client.get_org_actions_permissions(org)
     if actions_perms:

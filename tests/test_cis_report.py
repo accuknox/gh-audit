@@ -88,11 +88,19 @@ class TestCISMapping:
         assert check is not None
         assert check["status"] == "PASS"
 
-    def test_unmapped_control_is_warn(self):
-        """CIS 1.1.1 has no pipeaudit rule mapping — should be WARN."""
+    def test_inherently_pass_control(self):
+        """CIS 1.1.1 is inherently PASS (code tracked in VCS)."""
         report = _make_report()
         cis = generate_cis_report(report)
         check = _find_check(cis, "1.1.1")
+        assert check is not None
+        assert check["status"] == "PASS"
+
+    def test_unmapped_control_is_warn(self):
+        """CIS 1.1.2 has no pipeaudit rule mapping — should be WARN."""
+        report = _make_report()
+        cis = generate_cis_report(report)
+        check = _find_check(cis, "1.1.2")
         assert check is not None
         assert check["status"] == "WARN"
 
@@ -121,6 +129,42 @@ class TestCISMapping:
         ])
         cis = generate_cis_report(report)
         check = _find_check(cis, "1.3.3")
+        assert check is not None
+        assert check["status"] == "FAIL"
+
+
+    def test_new_rules_mapped(self):
+        """Verify new automated rules (BPR011, BPR012, SEC006-008, ORG006-007) are mapped."""
+        for rule_id in ("BPR011", "BPR012", "SEC006", "SEC007", "SEC008", "ORG006", "ORG007"):
+            assert rule_id in _RULE_TO_CIS, f"{rule_id} not in _RULE_TO_CIS"
+
+    def test_sec006_inactive_branches_maps_to_1_1_8(self):
+        """SEC006 should map to CIS 1.1.8 (inactive branches)."""
+        report = _make_report(repo_findings=[
+            {"rule_id": "SEC006", "severity": "low", "title": "Inactive branches"}
+        ])
+        cis = generate_cis_report(report)
+        check = _find_check(cis, "1.1.8")
+        assert check is not None
+        assert check["status"] == "FAIL"
+
+    def test_sec007_code_scanning_maps_to_1_5_4(self):
+        """SEC007 should map to CIS 1.5.4 (code vulnerability scanners)."""
+        report = _make_report(repo_findings=[
+            {"rule_id": "SEC007", "severity": "medium", "title": "No code scanning"}
+        ])
+        cis = generate_cis_report(report)
+        check = _find_check(cis, "1.5.4")
+        assert check is not None
+        assert check["status"] == "FAIL"
+
+    def test_org006_repo_creation_maps_to_1_2_2(self):
+        """ORG006 should map to CIS 1.2.2."""
+        report = _make_report(org_findings=[
+            {"rule_id": "ORG006", "severity": "medium", "title": "Repo creation unrestricted"}
+        ])
+        cis = generate_cis_report(report)
+        check = _find_check(cis, "1.2.2")
         assert check is not None
         assert check["status"] == "FAIL"
 

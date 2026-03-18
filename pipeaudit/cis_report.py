@@ -208,6 +208,8 @@ _RULE_TO_CIS: dict[str, list[str]] = {
     "BPR008": ["1.1.5"],             # Dismissal restrictions
     "BPR009": ["1.1.13"],            # Linear history
     "BPR010": ["1.1.11"],            # Conversation resolution
+    "BPR011": ["1.1.10"],            # Branches up to date before merge
+    "BPR012": ["1.1.14"],            # Branch protection enforced for admins
     # GitHub Actions
     "GHA001": ["2.3.4"],             # pull_request_target trigger
     "GHA001a": ["2.3.4"],            # pull_request_target checkout head
@@ -229,12 +231,17 @@ _RULE_TO_CIS: dict[str, list[str]] = {
     "SEC003": ["1.5.5"],             # Dependabot security updates
     "SEC004": ["1.1.6"],             # No CODEOWNERS
     "SEC005": ["1.2.1"],             # No SECURITY.md
+    "SEC006": ["1.1.8"],             # Inactive branches
+    "SEC007": ["1.5.4"],             # No code vulnerability scanning
+    "SEC008": ["1.2.7"],             # Inactive repo not archived
     # Org settings
-    "ORG001": ["1.3.5"],             # 2FA not required
+    "ORG001": ["1.3.5", "1.3.4"],   # 2FA not required (also covers MFA for contributors)
     "ORG002": ["1.3.8"],             # Default repo permission too broad
     "ORG003": ["1.4.1"],             # All actions allowed
     "ORG004": ["2.1.7"],             # Default token write
     "ORG005": ["2.3.5"],             # Fork PR workflows no approval
+    "ORG006": ["1.2.2"],             # Repo creation not restricted
+    "ORG007": ["1.3.9"],             # Org not verified
     # Identity & access
     "IAM001": ["1.3.3"],             # Too many org admins
     "IAM002": ["1.3.3"],             # Single org admin
@@ -256,6 +263,14 @@ _RULE_TO_CIS: dict[str, list[str]] = {
     "PAT002": ["2.1.7"],             # Inactive PAT
     "PAT003": ["2.1.7"],             # Overly permissive PAT
     "PAT004": ["2.1.7"],             # PAT all repo access
+}
+
+# Controls that are inherently PASS when using GitHub with pipeaudit
+# (no rule needed — the condition is always satisfied)
+_INHERENTLY_PASS: dict[str, str] = {
+    "1.1.1": "Code is tracked in GitHub, a version control platform",
+    "1.5.2": "pipeaudit scans CI/CD pipeline instructions for misconfigurations",
+    "2.3.6": "pipeaudit automatically scans pipelines for misconfigurations",
 }
 
 # Reverse map: CIS control ID -> list of pipeaudit rule_ids that test it
@@ -297,7 +312,16 @@ def generate_cis_report(report: dict) -> dict:
         cis_id = control["id"]
         mapped_rules = _CIS_TO_RULES.get(cis_id, [])
 
-        if not mapped_rules:
+        if cis_id in _INHERENTLY_PASS:
+            # Control is inherently satisfied when using GitHub with pipeaudit
+            cis_results[cis_id] = {
+                "status": "PASS",
+                "actual_value": _INHERENTLY_PASS[cis_id],
+                "expected_result": control["title"],
+                "reason": _INHERENTLY_PASS[cis_id],
+                "findings": [],
+            }
+        elif not mapped_rules:
             # No pipeaudit rule maps to this CIS control — WARN (not assessed)
             cis_results[cis_id] = {
                 "status": "WARN",

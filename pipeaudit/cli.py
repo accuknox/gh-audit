@@ -538,6 +538,23 @@ def main():
                 file=sys.stderr,
             )
 
+    # Generate CIS benchmark data (used by both JSON file and HTML report)
+    if cis_output or (html_output and platform == "github"):
+        from .cis_report import generate_cis_report, write_cis_report
+        cis_data = generate_cis_report(report)
+        report["cis_benchmark"] = cis_data
+
+        if cis_output:
+            import json as _json
+            with open(cis_output, "w") as _f:
+                _json.dump(cis_data, _f, indent=2)
+            if use_tui:
+                console.print(
+                    f"[bold green]CIS benchmark report written to {cis_output}[/bold green]"
+                )
+            else:
+                print(f"CIS benchmark report written to {cis_output}", file=sys.stderr)
+
     # Output HTML report
     if html_output:
         write_html_report(report, html_output)
@@ -557,17 +574,6 @@ def main():
             )
         else:
             print(f"SARIF report written to {sarif_output}", file=sys.stderr)
-
-    # Output CIS benchmark report
-    if cis_output:
-        from .cis_report import write_cis_report
-        write_cis_report(report, cis_output)
-        if use_tui:
-            console.print(
-                f"[bold green]CIS benchmark report written to {cis_output}[/bold green]"
-            )
-        else:
-            print(f"CIS benchmark report written to {cis_output}", file=sys.stderr)
 
     if log_file:
         if use_tui:
