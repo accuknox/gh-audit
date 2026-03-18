@@ -144,6 +144,15 @@ def main():
         help="(GitLab) Specific sub-groups to audit.",
     )
     parser.add_argument(
+        "--base-url",
+        metavar="URL",
+        default=None,
+        help=(
+            "(GitLab) Base API URL for self-hosted instances "
+            "(default: https://gitlab.com/api/v4)."
+        ),
+    )
+    parser.add_argument(
         "--output", "-o",
         help="Output file for the JSON report (default: stdout).",
     )
@@ -185,6 +194,30 @@ def main():
         action="store_true",
         default=None,
         help="Skip the GitHub Apps & fine-grained PATs audit.",
+    )
+    parser.add_argument(
+        "--skip-project-settings",
+        action="store_true",
+        default=None,
+        help="(Azure DevOps) Skip the project-level settings audit.",
+    )
+    parser.add_argument(
+        "--skip-pipeline-security",
+        action="store_true",
+        default=None,
+        help="(Azure DevOps / GitLab) Skip the pipeline security audit.",
+    )
+    parser.add_argument(
+        "--include-disabled-repos",
+        action="store_true",
+        default=None,
+        help="(Azure DevOps) Include disabled repositories in the scan.",
+    )
+    parser.add_argument(
+        "--skip-group-settings",
+        action="store_true",
+        default=None,
+        help="(GitLab) Skip the group-level settings audit.",
     )
     parser.add_argument(
         "--updated-within",
@@ -322,7 +355,7 @@ def main():
         from .gitlab.gitlab_token_validator import GitLabTokenError, validate_gitlab_token
         from .gitlab.gitlab_auditor import GitLabAuditConfig, run_gitlab_audit
 
-        base_url = getattr(config, "base_url", "https://gitlab.com/api/v4") if config else "https://gitlab.com/api/v4"
+        base_url = args.base_url or (getattr(config, "base_url", None) if config else None) or "https://gitlab.com/api/v4"
 
         if use_tui:
             console.print("[bold blue]Validating GitLab token...[/bold blue]")
@@ -348,8 +381,8 @@ def main():
             repos=args.repos or [],
             include_archived=include_archived,
             skip_identity=skip_identity,
-            skip_group_settings=getattr(config, "skip_group_settings", False) if config else False,
-            skip_pipeline_security=getattr(config, "skip_pipeline_security", False) if config else False,
+            skip_group_settings=args.skip_group_settings if args.skip_group_settings is not None else (getattr(config, "skip_group_settings", False) if config else False),
+            skip_pipeline_security=args.skip_pipeline_security if args.skip_pipeline_security is not None else (getattr(config, "skip_pipeline_security", False) if config else False),
             updated_within_months=updated_within,
         )
 
@@ -399,6 +432,9 @@ def main():
             projects=args.projects or (getattr(config, "projects", []) if config else []),
             repos=args.repos or [],
             skip_identity=skip_identity,
+            skip_project_settings=args.skip_project_settings if args.skip_project_settings is not None else (getattr(config, "skip_project_settings", False) if config else False),
+            skip_pipeline_security=args.skip_pipeline_security if args.skip_pipeline_security is not None else (getattr(config, "skip_pipeline_security", False) if config else False),
+            include_disabled_repos=args.include_disabled_repos if args.include_disabled_repos is not None else (getattr(config, "include_disabled_repos", False) if config else False),
             updated_within_months=updated_within,
         )
 
