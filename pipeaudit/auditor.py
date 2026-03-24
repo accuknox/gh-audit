@@ -47,6 +47,9 @@ class AuditConfig:
     skip_org_settings: bool = False
     skip_apps_and_tokens: bool = False
     updated_within_months: int | None = None  # Only scan repos updated within N months
+    action_runs_since: str | None = None  # YYYY-MM-DD
+    action_runs_until: str | None = None  # YYYY-MM-DD
+    action_runs_status: str | None = None
 
 
 class ProgressCallback(Protocol):
@@ -234,6 +237,30 @@ def run_audit(
             logger.warning("Apps & tokens audit failed: %s", e)
             report["apps_and_tokens"] = {"error": str(e), "findings": []}
             progress.on_apps_tokens_done(0)
+
+    # Action runs audit (time-framed workflow run history)
+    if config.action_runs_since:
+        try:
+            from .action_runs import fetch_action_runs
+            all_repo_metas = [meta for meta, _ in repos_to_audit]
+            logger.info(
+                "Starting action runs audit across %d repos (%s → %s)",
+                len(all_repo_metas),
+                config.action_runs_since,
+                config.action_runs_until or "now",
+            )
+            action_runs_report = fetch_action_runs(
+                client,
+                config.org,
+                all_repo_metas,
+                since=config.action_runs_since,
+                until=config.action_runs_until,
+                status_filter=config.action_runs_status,
+            )
+            report["action_runs"] = action_runs_report
+        except Exception as e:
+            logger.warning("Action runs fetch failed: %s", e)
+            report["action_runs"] = {"error": str(e), "runs": [], "summary": {}}
 
     # Compute risk scores
     enrich_report(report)

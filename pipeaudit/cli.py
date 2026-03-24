@@ -227,6 +227,21 @@ def main():
         help="Only scan repos updated (pushed to) within the last N months.",
     )
     parser.add_argument(
+        "--action-runs-since",
+        metavar="YYYY-MM-DD",
+        help="Fetch workflow action runs created on or after this date (enables Action Runs section).",
+    )
+    parser.add_argument(
+        "--action-runs-until",
+        metavar="YYYY-MM-DD",
+        help="Fetch workflow action runs created on or before this date (default: now).",
+    )
+    parser.add_argument(
+        "--action-runs-status",
+        choices=["completed", "in_progress", "queued", "success", "failure", "cancelled"],
+        help="Filter action runs by status/conclusion.",
+    )
+    parser.add_argument(
         "--log",
         metavar="FILE",
         help="Write a detailed log file (repos scanned, skipped, errors, etc.).",
@@ -494,6 +509,9 @@ def main():
             skip_identity=skip_identity,
             skip_apps_and_tokens=skip_apps_tokens,
             updated_within_months=updated_within,
+            action_runs_since=args.action_runs_since,
+            action_runs_until=args.action_runs_until,
+            action_runs_status=args.action_runs_status,
         )
 
         # Run the audit

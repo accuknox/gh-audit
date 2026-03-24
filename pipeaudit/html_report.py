@@ -144,6 +144,8 @@ def generate_html_report(report: dict) -> str:
 
 {_render_cis_section(report.get("cis_benchmark"))}
 
+{_render_action_runs_section(report.get("action_runs"))}
+
 <!-- Per-Repo Details -->
 <section class="card collapsible" id="sec-repos">
   <h2 class="section-toggle" onclick="toggleSection(this)">
@@ -275,6 +277,9 @@ def _build_nav_items(report: dict) -> str:
     cis_data = report.get("cis_benchmark")
     if cis_data:
         items.append(("sec-cis", "CIS Benchmark"))
+    action_runs = report.get("action_runs")
+    if action_runs and "error" not in action_runs and action_runs.get("runs"):
+        items.append(("sec-action-runs", "Action Runs"))
     items.append(("sec-repos", "Repositories"))
     return "".join(
         f'<a class="nav-link" href="#{sid}">{label}</a>'
@@ -684,6 +689,252 @@ def _render_cis_section(cis_data: dict | None) -> str:
 </section>""")
 
     return "\n".join(parts)
+
+
+def _render_action_runs_section(action_runs: dict | None) -> str:
+    """Render the Action Runs section with filters, jobs, and steps."""
+    if not action_runs or "error" in action_runs or not action_runs.get("runs"):
+        return ""
+
+    runs = action_runs["runs"]
+    summary = action_runs.get("summary", {})
+    filters_applied = action_runs.get("filters_applied", {})
+
+    total_runs = summary.get("total_runs", len(runs))
+    by_conclusion = summary.get("by_conclusion", {})
+    by_repo = summary.get("by_repo", {})
+    actions_used = summary.get("actions_used", {})
+
+    repos_list = sorted(by_repo.keys())
+    conclusions_list = sorted(by_conclusion.keys())
+    all_actions_list = sorted(actions_used.keys())
+    workflow_names = sorted(set(r.get("workflow_name", "") for r in runs if r.get("workflow_name")))
+
+    success_count = by_conclusion.get("success", 0)
+    failure_count = by_conclusion.get("failure", 0)
+    cancelled_count = by_conclusion.get("cancelled", 0)
+    in_progress_count = by_conclusion.get("in_progress", 0)
+
+    time_range = _esc(filters_applied.get("since", ""))
+    if filters_applied.get("until"):
+        time_range += f" to {_esc(filters_applied['until'])}"
+    else:
+        time_range += " to now"
+
+    # Compute min/max timestamps for date filter
+    timestamps = [r.get("created_at", "")[:10] for r in runs if r.get("created_at")]
+    min_date = min(timestamps) if timestamps else filters_applied.get("since", "")
+    max_date = max(timestamps) if timestamps else filters_applied.get("until", "")
+
+    # Build filter options
+    repo_options = '<option value="all">All Repos</option>'
+    for r in repos_list:
+        repo_options += f'<option value="{_esc(r)}">{_esc(r)} ({by_repo[r]})</option>'
+
+    conclusion_colors = {
+        "success": "#16a34a", "failure": "#dc2626", "cancelled": "#6b7280",
+        "in_progress": "#ca8a04", "skipped": "#94a3b8",
+    }
+    conclusion_btns = '<button class="filter-btn active" onclick="filterActionRuns(\'conclusion\', \'all\', this)">All</button>'
+    for c in conclusions_list:
+        color = conclusion_colors.get(c, "#6b7280")
+        conclusion_btns += (
+            f'<button class="filter-btn" onclick="filterActionRuns(\'conclusion\', \'{_esc(c)}\', this)" '
+            f'style="border-left:3px solid {color}">'
+            f'{_esc(c.upper())} ({by_conclusion[c]})</button>'
+        )
+
+    wf_options = '<option value="all">All Workflows</option>'
+    for wf in workflow_names:
+        wf_options += f'<option value="{_esc(wf)}">{_esc(wf)}</option>'
+
+    action_options = '<option value="all">All Actions</option>'
+    for a in all_actions_list:
+        action_options += f'<option value="{_esc(a)}">{_esc(a)} ({actions_used[a]})</option>'
+
+    uses_datalist_options = "".join(
+        f'<option value="{_esc(a)}">' for a in all_actions_list
+    )
+
+    # Build run rows with expandable jobs/steps
+    rows = []
+    for run in runs:
+        conclusion = run.get("conclusion") or run.get("status") or "unknown"
+        conclusion_color = conclusion_colors.get(conclusion, "#6b7280")
+        created_ts = run.get("created_at", "")
+        created_date = created_ts[:10] if created_ts else ""
+
+        # Actions used as badges (shown in detail row)
+        actions_badges = ""
+        for a in run.get("actions_used", []):
+            actions_badges += f'<span class="action-badge">{_esc(a)}</span> '
+
+        # Build jobs/steps detail
+        jobs = run.get("jobs", [])
+        jobs_html = ""
+        if jobs:
+            job_parts = []
+            for job in jobs:
+                jc = job.get("conclusion") or job.get("status") or ""
+                jc_color = conclusion_colors.get(jc, "#6b7280")
+                jc_icon = "&#10003;" if jc == "success" else "&#10007;" if jc == "failure" else "&#9644;" if jc == "skipped" else "&#9679;"
+
+                step_rows = []
+                for step in job.get("steps", []):
+                    sc = step.get("conclusion") or step.get("status") or ""
+                    sc_color = conclusion_colors.get(sc, "#6b7280")
+                    sc_icon = "&#10003;" if sc == "success" else "&#10007;" if sc == "failure" else "&#9644;" if sc == "skipped" else "&#9679;"
+                    step_name = step.get("name", "")
+                    is_action = step_name.startswith("Run ") or step_name.startswith("Post Run ")
+                    name_class = ' class="step-action"' if is_action else ""
+                    step_rows.append(
+                        f'<div class="step-row">'
+                        f'<span style="color:{sc_color}">{sc_icon}</span> '
+                        f'<span{name_class}>{_esc(step_name)}</span>'
+                        f'</div>'
+                    )
+
+                job_parts.append(
+                    f'<div class="job-block">'
+                    f'<div class="job-header" style="color:{jc_color}">'
+                    f'{jc_icon} <strong>{_esc(job["name"])}</strong>'
+                    f' <span class="job-conclusion">({_esc(jc)})</span>'
+                    f'</div>'
+                    f'<div class="steps-container">{"".join(step_rows)}</div>'
+                    f'</div>'
+                )
+            jobs_html = "".join(job_parts)
+
+        actions_data = "|".join(run.get("actions_used", []))
+
+        # Detail extras: event, branch, actor, actions used
+        detail_meta = (
+            f'<div class="run-detail-meta">'
+            f'<span><strong>Event:</strong> {_esc(run.get("event", "—"))}</span>'
+            f'<span><strong>Branch:</strong> {_esc(run.get("branch", "—"))}</span>'
+            f'<span><strong>Actor:</strong> {_esc(run.get("actor", "—"))}</span>'
+            f'</div>'
+        )
+        if actions_badges:
+            detail_meta += (
+                f'<div class="run-detail-actions">'
+                f'<strong>Actions used:</strong><br>{actions_badges}'
+                f'</div>'
+            )
+
+        detail_body = detail_meta + (jobs_html if jobs_html else "<em>No job data</em>")
+
+        # Main row — compact: Run #, Repo, Workflow, Status, Created, expand
+        row_id = f"ar-{run['run_id']}"
+        rows.append(
+            f'<tr class="action-run-row" '
+            f'data-repo="{_esc(run["repo"])}" '
+            f'data-conclusion="{_esc(conclusion)}" '
+            f'data-workflow="{_esc(run.get("workflow_name", ""))}" '
+            f'data-actions="{_esc(actions_data)}" '
+            f'data-date="{_esc(created_date)}">'
+            f'<td><a href="{_esc(run.get("html_url", "#"))}" target="_blank" rel="noopener">#{run.get("run_number", "")}</a></td>'
+            f'<td style="word-break:break-word;max-width:180px">{_esc(run["repo"])}</td>'
+            f'<td style="word-break:break-word;max-width:200px">{_esc(run.get("workflow_name", ""))}</td>'
+            f'<td><span style="color:{conclusion_color};font-weight:600">{_esc(conclusion.upper())}</span></td>'
+            f'<td class="ts-cell">{_esc(created_ts[:10] if created_ts else "")}</td>'
+            f'<td class="expand-cell"><button class="expand-btn" onclick="toggleRunDetail(\'{row_id}\')">&#9654;</button></td>'
+            f'</tr>'
+            f'<tr class="run-detail-row" id="{row_id}" style="display:none">'
+            f'<td colspan="6"><div class="run-detail">{detail_body}</div></td>'
+            f'</tr>'
+        )
+
+    return f"""
+<section class="card collapsible" id="sec-action-runs">
+  <h2 class="section-toggle" onclick="toggleSection(this)">
+    <span class="toggle-icon open">&#9660;</span> Action Runs ({total_runs} runs, {time_range})
+  </h2>
+  <div class="section-body">
+
+    <div class="summary-grid" style="margin-bottom:16px">
+      <div class="card stat-card">
+        <div class="stat-number">{total_runs}</div>
+        <div class="stat-label">Total Runs</div>
+      </div>
+      <div class="card stat-card">
+        <div class="stat-number" style="color:#16a34a">{success_count}</div>
+        <div class="stat-label">Success</div>
+      </div>
+      <div class="card stat-card">
+        <div class="stat-number" style="color:#dc2626">{failure_count}</div>
+        <div class="stat-label">Failure</div>
+      </div>
+      <div class="card stat-card">
+        <div class="stat-number" style="color:#6b7280">{cancelled_count + in_progress_count}</div>
+        <div class="stat-label">Other</div>
+      </div>
+      <div class="card stat-card">
+        <div class="stat-number">{len(all_actions_list)}</div>
+        <div class="stat-label">Unique Actions</div>
+      </div>
+    </div>
+
+    <div class="toolbar" style="flex-wrap:wrap;gap:8px;margin-bottom:12px">
+      <select id="ar-repo-filter" class="filter-select" onchange="applyActionRunFilters()">
+        {repo_options}
+      </select>
+      <select id="ar-workflow-filter" class="filter-select" onchange="applyActionRunFilters()">
+        {wf_options}
+      </select>
+      <input type="text" id="ar-text-filter" class="filter-input" placeholder="Search runs..."
+             onkeyup="applyActionRunFilters()" style="max-width:180px">
+    </div>
+    <div class="toolbar" style="flex-wrap:wrap;gap:8px;margin-bottom:12px;align-items:center">
+      <label style="font-size:0.83rem;color:var(--text-muted);white-space:nowrap">step.uses filter:</label>
+      <div class="uses-filter-wrap">
+        <input type="text" id="ar-uses-filter" class="filter-input" placeholder="e.g. actions/checkout"
+               list="ar-uses-datalist" onkeyup="applyActionRunFilters()" oninput="applyActionRunFilters()"
+               style="min-width:220px">
+        <datalist id="ar-uses-datalist">
+          {uses_datalist_options}
+        </datalist>
+        <button class="filter-clear-btn" id="ar-uses-clear" onclick="clearUsesFilter()" title="Clear">&#10005;</button>
+      </div>
+      <span id="ar-uses-match-count" style="font-size:0.8rem;color:var(--text-muted)"></span>
+    </div>
+    <div class="toolbar" style="flex-wrap:wrap;gap:8px;margin-bottom:12px;align-items:center">
+      <label style="font-size:0.85rem;color:var(--text-muted)">Date range:</label>
+      <input type="date" id="ar-date-from" class="filter-input" value="{_esc(min_date)}"
+             onchange="applyActionRunFilters()" style="max-width:160px">
+      <span style="font-size:0.85rem;color:var(--text-muted)">to</span>
+      <input type="date" id="ar-date-to" class="filter-input" value="{_esc(max_date)}"
+             onchange="applyActionRunFilters()" style="max-width:160px">
+    </div>
+    <div class="filter-buttons" id="ar-conclusion-filters" style="margin-bottom:12px">
+      {conclusion_btns}
+    </div>
+
+    <table class="data-table" id="action-runs-table" style="width:100%;table-layout:fixed">
+      <colgroup>
+        <col style="width:70px">
+        <col style="width:22%">
+        <col style="width:auto">
+        <col style="width:100px">
+        <col style="width:100px">
+        <col style="width:40px">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Run</th>
+          <th>Repository</th>
+          <th>Workflow</th>
+          <th>Status</th>
+          <th>Created</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {"".join(rows)}
+      </tbody>
+    </table>
+  </div>
+</section>"""
 
 
 def _render_apps_and_tokens_section(apps_tokens: dict | None) -> str:
@@ -1371,6 +1622,72 @@ footer {
 /* Smooth scroll */
 html { scroll-behavior: smooth; scroll-padding-top: 60px; }
 
+/* Action Runs */
+.filter-select {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  background: #fff;
+  color: var(--text);
+}
+.action-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  margin: 1px 2px;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-family: monospace;
+  background: #e0e7ff;
+  color: #3730a3;
+  white-space: nowrap;
+}
+.job-row {
+  padding: 2px 0;
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+.job-badge {
+  font-size: 0.85rem;
+  margin-right: 2px;
+}
+.step-list {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  margin-left: 6px;
+}
+.ts-cell { white-space: nowrap; font-size: 0.8rem; }
+.actions-cell { max-width: 250px; }
+.jobs-cell { max-width: 300px; min-width: 180px; }
+.expand-cell { text-align: center; width: 40px; }
+.expand-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  color: var(--text-muted);
+  transition: all 0.15s;
+}
+.expand-btn:hover { background: #f1f5f9; color: var(--accent); border-color: var(--accent); }
+.expand-btn.open { transform: rotate(90deg); }
+.uses-filter-wrap { position: relative; display: inline-flex; align-items: center; gap: 4px; }
+.filter-clear-btn { display: none; align-items: center; justify-content: center; width: 22px; height: 22px; border: 1px solid var(--border); border-radius: 4px; background: #fff; color: var(--text-muted); font-size: 0.75rem; cursor: pointer; padding: 0; line-height: 1; }
+.filter-clear-btn:hover { background: #fee2e2; color: #dc2626; border-color: #dc2626; }
+.run-detail-row td { padding: 0 !important; border-bottom: 1px solid var(--border); }
+.run-detail { padding: 12px 16px 12px 24px; background: #f8fafc; }
+.run-detail-meta { display: flex; flex-wrap: wrap; gap: 12px 24px; font-size: 0.83rem; color: var(--text-muted); margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+.run-detail-meta span { white-space: nowrap; }
+.run-detail-actions { font-size: 0.83rem; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--border); line-height: 1.8; }
+.job-block { margin-bottom: 10px; }
+.job-block:last-child { margin-bottom: 0; }
+.job-header { font-size: 0.85rem; margin-bottom: 4px; }
+.job-conclusion { font-size: 0.8rem; font-weight: 400; opacity: 0.8; }
+.steps-container { margin-left: 18px; border-left: 2px solid var(--border); padding-left: 10px; }
+.step-row { font-size: 0.8rem; padding: 1px 0; color: var(--text-muted); }
+.step-action { font-family: monospace; font-size: 0.78rem; color: #3730a3; }
+
 /* Print */
 @media print {
   header { background: #1e3a5f !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -1595,6 +1912,85 @@ function sortTable(tableId, colIdx, dataType) {
   });
 
   rows.forEach(function(row) { tbody.appendChild(row); });
+}
+
+/* ---- Action Runs filters ---- */
+var arConclusionFilter = 'all';
+
+function filterActionRuns(type, value, btn) {
+  if (type === 'conclusion') {
+    arConclusionFilter = value;
+    if (btn) {
+      btn.closest('.filter-buttons').querySelectorAll('.filter-btn').forEach(function(b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+    }
+  }
+  applyActionRunFilters();
+}
+
+function toggleRunDetail(rowId) {
+  var detailRow = document.getElementById(rowId);
+  if (!detailRow) return;
+  var isVisible = detailRow.style.display !== 'none';
+  detailRow.style.display = isVisible ? 'none' : '';
+  // Toggle the expand button icon
+  var mainRow = detailRow.previousElementSibling;
+  if (mainRow) {
+    var btn = mainRow.querySelector('.expand-btn');
+    if (btn) {
+      btn.classList.toggle('open');
+      btn.innerHTML = isVisible ? '&#9654;' : '&#9660;';
+    }
+  }
+}
+
+function applyActionRunFilters() {
+  var repoVal = (document.getElementById('ar-repo-filter') || {}).value || 'all';
+  var wfVal = (document.getElementById('ar-workflow-filter') || {}).value || 'all';
+  var textVal = ((document.getElementById('ar-text-filter') || {}).value || '').toLowerCase();
+  var usesVal = ((document.getElementById('ar-uses-filter') || {}).value || '').toLowerCase().trim();
+  var dateFrom = (document.getElementById('ar-date-from') || {}).value || '';
+  var dateTo = (document.getElementById('ar-date-to') || {}).value || '';
+
+  var clearBtn = document.getElementById('ar-uses-clear');
+  if (clearBtn) clearBtn.style.display = usesVal ? 'inline-flex' : 'none';
+
+  var rows = document.querySelectorAll('#action-runs-table tbody .action-run-row');
+  var visibleCount = 0;
+  rows.forEach(function(row) {
+    var matchRepo = (repoVal === 'all' || row.getAttribute('data-repo') === repoVal);
+    var matchConclusion = (arConclusionFilter === 'all' || row.getAttribute('data-conclusion') === arConclusionFilter);
+    var matchWf = (wfVal === 'all' || row.getAttribute('data-workflow') === wfVal);
+    var matchText = !textVal || row.textContent.toLowerCase().indexOf(textVal) !== -1;
+    var matchUses = true;
+    if (usesVal) {
+      var actions = (row.getAttribute('data-actions') || '').toLowerCase().split('|');
+      matchUses = actions.some(function(a) { return a.indexOf(usesVal) !== -1; });
+    }
+    var matchDate = true;
+    var rowDate = row.getAttribute('data-date') || '';
+    if (dateFrom && rowDate) matchDate = rowDate >= dateFrom;
+    if (matchDate && dateTo && rowDate) matchDate = rowDate <= dateTo;
+
+    var visible = matchRepo && matchConclusion && matchWf && matchText && matchUses && matchDate;
+    row.style.display = visible ? '' : 'none';
+    if (visible) visibleCount++;
+    var detailRow = row.nextElementSibling;
+    if (detailRow && detailRow.classList.contains('run-detail-row')) {
+      if (!visible) detailRow.style.display = 'none';
+    }
+  });
+
+  var countEl = document.getElementById('ar-uses-match-count');
+  if (countEl) {
+    countEl.textContent = usesVal ? visibleCount + ' run' + (visibleCount !== 1 ? 's' : '') + ' matched' : '';
+  }
+}
+
+function clearUsesFilter() {
+  var inp = document.getElementById('ar-uses-filter');
+  if (inp) { inp.value = ''; }
+  applyActionRunFilters();
 }
 
 /* ---- Init: open sections by default, auto-expand critical/high repos ---- */

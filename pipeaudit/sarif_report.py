@@ -848,6 +848,88 @@ def generate_sarif_report(report: dict) -> dict:
 
         results.append(result)
 
+    # Action runs (informational entries, not findings)
+    action_runs = report.get("action_runs") or {}
+    for run in action_runs.get("runs", []):
+        rule_id = "AR001"
+        if rule_id not in rules_seen:
+            rules_seen[rule_id] = {
+                "title": "Action Workflow Run",
+                "description": "A GitHub Actions workflow run was executed in the audited time window.",
+                "severity": "info",
+            }
+
+        # Build jobs summary text
+        jobs_summary = []
+        for job in run.get("jobs", []):
+            steps_text = ", ".join(
+                s.get("name", "") for s in job.get("steps", [])
+            )
+            jobs_summary.append(
+                f"Job '{job.get('name', '')}' ({job.get('conclusion', 'unknown')}): [{steps_text}]"
+            )
+
+        actions_list = run.get("actions_used", [])
+        conclusion = run.get("conclusion") or run.get("status") or "unknown"
+        msg = (
+            f"Workflow '{run.get('workflow_name', '')}' "
+            f"run #{run.get('run_number', '')} "
+            f"on {run.get('repo', '')} "
+            f"({conclusion}) triggered by {run.get('event', '')} "
+            f"on branch {run.get('branch', '')} by {run.get('actor', '')}."
+        )
+
+        result = {
+            "ruleId": _descriptive_rule_id(rule_id),
+            "level": "none",
+            "message": {
+                "text": msg,
+            },
+            "locations": [
+                {
+                    "logicalLocations": [
+                        {"name": run.get("repo", ""), "kind": "namespace"},
+                    ],
+                }
+            ],
+            "properties": {
+                "category": "action-runs",
+                "repository": run.get("repo", ""),
+                "workflow_name": run.get("workflow_name", ""),
+                "workflow_path": run.get("workflow_path", ""),
+                "run_id": run.get("run_id", 0),
+                "run_number": run.get("run_number", 0),
+                "event": run.get("event", ""),
+                "status": run.get("status", ""),
+                "conclusion": conclusion,
+                "branch": run.get("branch", ""),
+                "actor": run.get("actor", ""),
+                "created_at": run.get("created_at", ""),
+                "updated_at": run.get("updated_at", ""),
+                "html_url": run.get("html_url", ""),
+                "actions_used": actions_list,
+                "jobs": [
+                    {
+                        "name": job.get("name", ""),
+                        "conclusion": job.get("conclusion", ""),
+                        "steps": [
+                            {
+                                "name": s.get("name", ""),
+                                "conclusion": s.get("conclusion", ""),
+                                "number": s.get("number", 0),
+                            }
+                            for s in job.get("steps", [])
+                        ],
+                    }
+                    for job in run.get("jobs", [])
+                ],
+            },
+        }
+        results.append(result)
+
+    # Action runs summary in invocation properties
+    ar_summary = action_runs.get("summary")
+
     # Build rule descriptors
     rules = []
     for rule_id in sorted(rules_seen.keys()):
@@ -930,6 +1012,7 @@ def generate_sarif_report(report: dict) -> dict:
                             "totalReposScanned": report.get("audit_metadata", {}).get("total_repos_scanned", 0),
                             "totalWorkflowsScanned": report.get("audit_metadata", {}).get("total_workflows_scanned", 0),
                             "riskScore": report.get("audit_metadata", {}).get("org_score", {}),
+                            **({"actionRunsSummary": ar_summary} if ar_summary else {}),
                         },
                         "workingDirectory": {
                             "uri": report.get("audit_metadata", {}).get("organization", ""),

@@ -26,6 +26,13 @@ class GitHubClient:
 
         while url:
             resp = self._session.get(url, params=params, timeout=30)
+            if resp.status_code == 403:
+                logger.warning(
+                    "Got 403 fetching repos page (%s); returning %d repos collected so far.",
+                    url,
+                    len(repos),
+                )
+                break
             resp.raise_for_status()
             repos.extend(resp.json())
             url = resp.links.get("next", {}).get("url")
@@ -281,6 +288,62 @@ class GitHubClient:
             return None
         resp.raise_for_status()
         return resp.json()
+
+    # -----------------------------------------------------------------
+    # Workflow runs & jobs
+    # -----------------------------------------------------------------
+
+    def list_workflow_runs(
+        self, owner: str, repo: str,
+        created: str | None = None,
+        status: str | None = None,
+        per_page: int = 30,
+    ) -> list[dict]:
+        """List workflow runs for a repository (single page, no pagination).
+
+        Args:
+            created: Date filter in GitHub format, e.g. '2024-03-19..2024-03-20'
+                     or '>=2024-03-19'.
+            status: Filter by status: completed, in_progress, queued, etc.
+            per_page: Max results to return (default 30, max 100).
+        """
+        params: dict = {"per_page": per_page}
+        if created:
+            params["created"] = created
+        if status:
+            params["status"] = status
+        url = f"{GITHUB_API}/repos/{owner}/{repo}/actions/runs"
+        resp = self._session.get(url, params=params, timeout=30)
+        logger.debug("workflow runs %s/%s → HTTP %d", owner, repo, resp.status_code)
+        if resp.status_code == 403:
+            logger.warning(
+                "Got 403 fetching workflow runs for %s/%s — your PAT likely needs "
+                "'Actions: Read-only' permission. Grant it at: "
+                "https://github.com/settings/personal-access-tokens",
+                owner, repo,
+            )
+            return []
+        if resp.status_code == 404:
+            return []
+        resp.raise_for_status()
+        data = resp.json()
+        total_count = data.get("total_count", "?")
+        runs = data.get("workflow_runs", [])
+        logger.info(
+            "workflow runs %s/%s: total_count=%s, returned=%d (filter: %s)",
+            owner, repo, total_count, len(runs), params.get("created", "none"),
+        )
+        return runs
+
+    def list_workflow_run_jobs(
+        self, owner: str, repo: str, run_id: int
+    ) -> list[dict]:
+        """List jobs for a workflow run, including step details."""
+        return self._paginate(
+            f"{GITHUB_API}/repos/{owner}/{repo}/actions/runs/{run_id}/jobs",
+            params={"per_page": 100},
+            key="jobs",
+        )
 
     # -----------------------------------------------------------------
     # Helpers

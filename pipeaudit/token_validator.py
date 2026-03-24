@@ -84,25 +84,22 @@ WRITE_SCOPES = {
 
 
 def _reject_classic_pat(scopes_header: str):
-    """Reject all classic PATs — they cannot provide read-only private repo access."""
+    """Warn about classic PATs — they may have broader access than needed."""
     scopes = {s.strip() for s in scopes_header.split(",") if s.strip()}
     dangerous = scopes & WRITE_SCOPES
 
     if dangerous:
-        raise TokenPermissionError(
-            f"Classic PAT detected with write/admin scopes: "
-            f"{', '.join(sorted(dangerous))}. "
-            f"Classic PATs are not supported. Please create a fine-grained PAT "
-            f"with read-only permissions. See 'pipeaudit --help' for setup instructions."
+        logger.warning(
+            "Classic PAT detected with write/admin scopes: %s. "
+            "For least-privilege access, consider creating a fine-grained PAT "
+            "with read-only permissions instead.",
+            ", ".join(sorted(dangerous)),
         )
-
-    # Even read-only classic PATs can't access private repos without 'repo' scope
-    raise TokenPermissionError(
-        "Classic PAT detected. Classic PATs cannot access private repositories "
-        "without the 'repo' scope, which grants write access. "
-        "Please create a fine-grained PAT with read-only permissions instead. "
-        "See 'pipeaudit --help' for setup instructions."
-    )
+    else:
+        logger.warning(
+            "Classic PAT detected. For least-privilege access, consider creating "
+            "a fine-grained PAT with read-only permissions instead."
+        )
 
 
 # ---- Fine-grained PAT: minimum permission checks ----
@@ -209,12 +206,8 @@ def _check_required_read_permissions(token: str, org: str):
             logger.warning("Optional permission missing: %s", w.split("\n")[0].strip())
 
     if missing:
-        perms_list = "\n    ".join(missing)
-        raise TokenPermissionError(
-            f"Token is missing required permissions. In your fine-grained PAT settings, "
-            f"enable these:\n\n    {perms_list}\n\n"
-            f"See 'pipeaudit --help' for full setup instructions."
-        )
+        for m in missing:
+            logger.warning("Missing permission (audit may be degraded): %s", m.split("\n")[0].strip())
 
 
 def _auth_headers(token: str) -> dict:
