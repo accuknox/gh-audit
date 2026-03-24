@@ -146,6 +146,8 @@ def generate_html_report(report: dict) -> str:
 
 {_render_action_runs_section(report.get("action_runs"))}
 
+{_render_trivy_advisory_section(report.get("trivy_advisory"))}
+
 <!-- Per-Repo Details -->
 <section class="card collapsible" id="sec-repos">
   <h2 class="section-toggle" onclick="toggleSection(this)">
@@ -280,6 +282,9 @@ def _build_nav_items(report: dict) -> str:
     action_runs = report.get("action_runs")
     if action_runs and "error" not in action_runs and action_runs.get("runs"):
         items.append(("sec-action-runs", "Action Runs"))
+    trivy = report.get("trivy_advisory")
+    if trivy and "error" not in trivy and trivy.get("total_findings", 0) > 0:
+        items.append(("sec-trivy-advisory", "Trivy Advisory"))
     items.append(("sec-repos", "Repositories"))
     return "".join(
         f'<a class="nav-link" href="#{sid}">{label}</a>'
@@ -1330,6 +1335,166 @@ def _render_inactive_members_table(inactive: dict) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Trivy Supply Chain Advisory Section (CVE-2026-33634)
+# ---------------------------------------------------------------------------
+
+def _render_trivy_advisory_section(trivy_data: dict | None) -> str:
+    """Render the Trivy supply chain advisory section."""
+    if not trivy_data or "error" in trivy_data or trivy_data.get("total_findings", 0) == 0:
+        return ""
+
+    findings = trivy_data.get("findings", [])
+    by_repo = trivy_data.get("by_repo", {})
+    sev_counts = trivy_data.get("severity_counts", {})
+    total = trivy_data["total_findings"]
+    repos_affected = trivy_data.get("repos_affected", 0)
+    repos_using = trivy_data.get("repos_using_trivy", 0)
+    repos_safe = trivy_data.get("repos_safe", 0)
+    cve_id = trivy_data.get("cve_id", "CVE-2026-33634")
+    advisory_url = trivy_data.get("advisory_url", "#")
+    affected_actions = trivy_data.get("affected_actions", {})
+    affected_binary = trivy_data.get("affected_binary_versions", [])
+
+    critical_count = sev_counts.get("critical", 0)
+    medium_count = sev_counts.get("medium", 0)
+    info_count = sev_counts.get("info", 0)
+
+    # Status colors
+    status_styles = {
+        "affected": "background:#fecaca;color:#991b1b;border:1px solid #fca5a5",
+        "review": "background:#fef08a;color:#854d0e;border:1px solid #fde047",
+        "safe": "background:#bbf7d0;color:#166534;border:1px solid #86efac",
+    }
+
+    # Build affected actions info
+    actions_info = ""
+    for action_name, info in affected_actions.items():
+        actions_info += (
+            f'<tr><td><code>{_esc(action_name)}</code></td>'
+            f'<td>&lt; {_esc(info["safe_version"])}</td>'
+            f'<td><strong>&ge; {_esc(info["safe_version"])}</strong></td></tr>'
+        )
+    if affected_binary:
+        actions_info += (
+            f'<tr><td><code>aquasec/trivy</code> (Docker image)</td>'
+            f'<td>{_esc(", ".join(affected_binary))}</td>'
+            f'<td><strong>0.69.2, 0.69.3, or &ge; 0.69.7</strong></td></tr>'
+        )
+
+    # Build per-repo finding rows
+    repo_sections = []
+    for repo_name in sorted(by_repo.keys()):
+        repo_findings = by_repo[repo_name]
+        has_critical = any(f.get("severity") == "critical" for f in repo_findings)
+        repo_border = "#dc2626" if has_critical else "#ca8a04" if any(f.get("severity") == "medium" for f in repo_findings) else "#16a34a"
+
+        finding_rows = ""
+        for f in repo_findings:
+            status = f.get("status", "review")
+            style = status_styles.get(status, "")
+            finding_rows += (
+                f'<tr>'
+                f'<td><span class="trivy-status-badge" style="{style}">'
+                f'{_esc(status.upper())}</span></td>'
+                f'<td><code>{_esc(f.get("action", ""))}</code></td>'
+                f'<td>{_esc(f.get("workflow", ""))}</td>'
+                f'<td>{_esc(f.get("job", ""))}</td>'
+                f'<td>{_esc(f.get("step", ""))}</td>'
+                f'<td style="font-size:0.82rem">{_esc(f.get("message", ""))}</td>'
+                f'</tr>'
+            )
+
+        repo_sections.append(
+            f'<div class="trivy-repo-block" style="border-left:4px solid {repo_border};'
+            f'padding:12px 16px;margin-bottom:12px;background:var(--bg);border-radius:6px">'
+            f'<h4 style="margin:0 0 8px 0;font-size:0.95rem">{_esc(repo_name)}'
+            f' <span style="font-weight:normal;color:var(--text-muted)">({len(repo_findings)} finding(s))</span></h4>'
+            f'<table class="findings-table" style="width:100%;font-size:0.83rem">'
+            f'<thead><tr><th>Status</th><th>Action/Image</th><th>Workflow</th><th>Job</th><th>Step</th><th>Details</th></tr></thead>'
+            f'<tbody>{finding_rows}</tbody>'
+            f'</table></div>'
+        )
+
+    # Banner color based on severity
+    banner_bg = "#fef2f2" if critical_count > 0 else "#fffbeb" if medium_count > 0 else "#f0fdf4"
+    banner_border = "#dc2626" if critical_count > 0 else "#ca8a04" if medium_count > 0 else "#16a34a"
+
+    return f"""
+<section class="card collapsible" id="sec-trivy-advisory">
+  <h2 class="section-toggle" onclick="toggleSection(this)">
+    <span class="toggle-icon open">&#9660;</span>
+    Trivy Supply Chain Advisory ({cve_id})
+    {f'<span style="background:#dc2626;color:#fff;padding:2px 10px;border-radius:12px;font-size:0.75rem;margin-left:8px;vertical-align:middle">CRITICAL</span>' if critical_count > 0 else ''}
+  </h2>
+  <div class="section-body">
+
+    <!-- Advisory Banner -->
+    <div style="background:{banner_bg};border:1px solid {banner_border};border-radius:8px;padding:16px 20px;margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <span style="font-size:1.3rem">{"&#9888;" if critical_count > 0 else "&#9432;"}</span>
+        <strong style="font-size:1rem">{cve_id} &mdash; Trivy Ecosystem Supply Chain Compromise</strong>
+      </div>
+      <p style="margin:0 0 8px 0;font-size:0.88rem;color:#374151">
+        Threat actors compromised Trivy distribution channels (binaries, Docker images, and GitHub Actions)
+        by exploiting non-atomic credential rotation. Malicious releases exfiltrate CI secrets including
+        SSH keys, credentials, and tokens.
+      </p>
+      <a href="{_esc(advisory_url)}" target="_blank" rel="noopener"
+         style="font-size:0.85rem;color:#2563eb">View full advisory &rarr;</a>
+    </div>
+
+    <!-- Summary Stats -->
+    <div class="summary-grid" style="margin-bottom:16px">
+      <div class="card stat-card">
+        <div class="stat-number">{repos_using}</div>
+        <div class="stat-label">Repos Using Trivy</div>
+      </div>
+      <div class="card stat-card">
+        <div class="stat-number" style="color:#dc2626">{repos_affected}</div>
+        <div class="stat-label">Repos Affected</div>
+      </div>
+      <div class="card stat-card">
+        <div class="stat-number" style="color:#16a34a">{max(0, repos_safe)}</div>
+        <div class="stat-label">Repos Safe</div>
+      </div>
+      <div class="card stat-card">
+        <div class="stat-number">{total}</div>
+        <div class="stat-label">Total Findings</div>
+      </div>
+    </div>
+
+    <!-- Severity breakdown -->
+    <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+      {f'<span style="background:#fecaca;color:#991b1b;padding:4px 12px;border-radius:12px;font-size:0.83rem;font-weight:600">Critical: {critical_count}</span>' if critical_count else ''}
+      {f'<span style="background:#fef08a;color:#854d0e;padding:4px 12px;border-radius:12px;font-size:0.83rem;font-weight:600">Needs Review: {medium_count}</span>' if medium_count else ''}
+      {f'<span style="background:#bbf7d0;color:#166534;padding:4px 12px;border-radius:12px;font-size:0.83rem;font-weight:600">Safe: {info_count}</span>' if info_count else ''}
+    </div>
+
+    <!-- Affected Versions Reference -->
+    <details style="margin-bottom:16px">
+      <summary style="cursor:pointer;font-weight:600;font-size:0.9rem;color:var(--text-primary)">
+        Affected Versions Reference
+      </summary>
+      <table class="findings-table" style="width:100%;margin-top:8px;font-size:0.85rem">
+        <thead><tr><th>Component</th><th>Affected Versions</th><th>Safe Versions</th></tr></thead>
+        <tbody>{actions_info}</tbody>
+      </table>
+      <div style="margin-top:8px;font-size:0.82rem;color:var(--text-muted)">
+        <strong>Recommendation:</strong> Pin GitHub Actions to immutable commit SHAs rather than mutable version tags.
+        Rotate all secrets that may have been exposed during the attack window (March 19-22, 2026).
+      </div>
+    </details>
+
+    <!-- Per-Repo Findings -->
+    <h3 style="font-size:0.95rem;margin-bottom:10px">Findings by Repository</h3>
+    {"".join(repo_sections)}
+
+  </div>
+</section>
+"""
+
+
+# ---------------------------------------------------------------------------
 # Embedded CSS
 # ---------------------------------------------------------------------------
 
@@ -1630,6 +1795,27 @@ html { scroll-behavior: smooth; scroll-padding-top: 60px; }
   font-size: 0.85rem;
   background: #fff;
   color: var(--text);
+}
+.trivy-status-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: 0.73rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.trivy-repo-block table th {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 2px solid var(--border);
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+.trivy-repo-block table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
 }
 .action-badge {
   display: inline-block;

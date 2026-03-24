@@ -262,6 +262,18 @@ def run_audit(
             logger.warning("Action runs fetch failed: %s", e)
             report["action_runs"] = {"error": str(e), "runs": [], "summary": {}}
 
+    # Trivy supply chain advisory check (CVE-2026-33634)
+    try:
+        from .trivy_advisory import scan_workflows_for_trivy
+        all_repo_pairs = [(meta, branch) for meta, branch in repos_to_audit]
+        trivy_report = scan_workflows_for_trivy(
+            client, config.org, all_repo_pairs,
+        )
+        report["trivy_advisory"] = trivy_report
+    except Exception as e:
+        logger.warning("Trivy advisory scan failed: %s", e)
+        report["trivy_advisory"] = {"error": str(e), "findings": [], "total_findings": 0}
+
     # Compute risk scores
     enrich_report(report)
 
