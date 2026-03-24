@@ -196,6 +196,7 @@ def scan_workflows_for_trivy(
         full_name = repo_meta["full_name"]
         owner, repo = full_name.split("/", 1)
         findings = []
+        seen: set[tuple[str, str]] = set()  # (workflow, action) dedup key
 
         try:
             wf_files = client.list_workflow_files(owner, repo, branch)
@@ -227,8 +228,12 @@ def scan_workflows_for_trivy(
                     uses = step.get("uses", "")
                     if uses and "@" in uses:
                         action_path, ref = uses.rsplit("@", 1)
+                        dedup_key = (wf_name, f"{action_path}@{ref}")
+                        if dedup_key in seen:
+                            continue
                         result = _check_action_ref(action_path, ref)
                         if result:
+                            seen.add(dedup_key)
                             result["repo"] = full_name
                             result["workflow"] = wf_name
                             result["job"] = job_id
@@ -240,6 +245,10 @@ def scan_workflows_for_trivy(
                     if run_cmd:
                         result = _check_docker_image_in_run(run_cmd)
                         if result:
+                            dedup_key = (wf_name, result["action"])
+                            if dedup_key in seen:
+                                continue
+                            seen.add(dedup_key)
                             result["repo"] = full_name
                             result["workflow"] = wf_name
                             result["job"] = job_id
